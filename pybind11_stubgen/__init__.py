@@ -547,6 +547,14 @@ class AttributeStubsGenerator(StubsGenerator):
         return False
 
     def to_lines(self):  # type: () -> List[str]
+        # special case for boost-python enums
+        attr_type = type(self.attr)
+        if any(
+            "{module}.{name}".format(module=b.__module__, name=b.__name__) == "Boost.Python.enum"
+            for b in attr_type.__bases__
+        ):
+            return ["{name} = {repr}".format(name=self.name, repr=repr(int(self.attr)))]
+
         if self.is_safe_to_use_repr(self.attr):
             return ["{name} = {repr}".format(name=self.name, repr=repr(self.attr))]
 
@@ -557,7 +565,6 @@ class AttributeStubsGenerator(StubsGenerator):
 
         # special case for PyCapsule
         # https://github.com/sizmailov/pybind11-stubgen/issues/86
-        attr_type = type(self.attr)
         if attr_type.__name__ == "PyCapsule" and attr_type.__module__ == "builtins":
             return ["{name}: typing.Any  # PyCapsule()".format(name=self.name)]
 
