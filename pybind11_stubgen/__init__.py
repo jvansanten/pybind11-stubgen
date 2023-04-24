@@ -567,9 +567,26 @@ class FreeFunctionStubsGenerator(StubsGenerator):
                     pass
         return involved_modules_names
 
+DUNDER_METHODS = {
+    "__init__",
+    "__getitem__",
+    "__setitem__",
+    "__getstate__",
+    "__setstate__",
+    "__setattr__",
+    "__getattr__",
+    "__copy__",
+    "__deepcopy__",
+    "__iadd__",
+    "__idiv__",
+    "__imul__",
+    "__isub__",
+    "__iter__",
+}
 
 class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
-    def __init__(self, name, free_function, module_name):
+    def __init__(self, name, free_function, class_name, module_name):
+        self.class_name = class_name
         super(ClassMemberStubsGenerator, self).__init__(
             name, free_function, module_name
         )
@@ -586,6 +603,14 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
         for sig in self.signatures:
             args = sig.args
             sargs = args.strip()
+            # detect boost::python self
+            if sargs:
+                first = sig.split_arguments()[0].split(":")
+                arg = first[0].strip()
+                argt = first[-1].strip()
+                if argt == self.class_name or self.name in DUNDER_METHODS:
+                    sargs = sargs.replace(arg, "self")
+            
             if not sargs.startswith("self"):
                 if sargs.startswith("cls"):
                     result.append("@classmethod")
@@ -727,7 +752,7 @@ class ClassStubsGenerator(StubsGenerator):
                 self.alias.append(AliasStubsGenerator(name, member))
             elif inspect.isroutine(member):
                 self.methods.append(
-                    ClassMemberStubsGenerator(name, member, self.klass.__module__)
+                    ClassMemberStubsGenerator(name, member, self.klass.__name__, self.klass.__module__)
                 )
             elif name != "__class__" and inspect.isclass(member):
                 if (
