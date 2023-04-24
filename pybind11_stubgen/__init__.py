@@ -17,6 +17,87 @@ _visited_objects = []
 # A list of function docstring pre-processing hooks
 function_docstring_preprocessing_hooks: List[Callable[[str], str]] = []
 
+def flip_arg_annotations(doc: str) -> str:
+    """
+    replace "(type)arg" with "arg: type". type may contain qualifiers, e.g. "foo.bar.type"
+    """
+    return re.sub(
+        "\(((?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+)\)([A-Za-z_]\w*)",
+        r"\2: \1",
+        doc
+    )
+
+def strip_trailing_colon(doc: str) -> str:
+    """
+    Strip trailing colon from boost-python-generated signature
+    """
+    pattern = "(-> [A-Za-z_]\w*).*$"
+    repl = r"\1"
+    return re.sub(pattern, repl, doc, flags=re.MULTILINE)    
+
+OBJECT_PROTOCOL_RETURN_TYPES = {
+    "__init__": "None",
+    "__ge__": "bool",
+    "__gt__": "bool",
+    "__lt__": "bool",
+    "__le__": "bool",
+    "__eq__": "bool",
+    "__ne__": "bool",
+    "__repr__": "str",
+    "__str__": "str",
+}
+
+def expand_overloads(doc: str) -> str:
+    """
+    Replace
+
+    func( a, b [, c [, d]]) -> f
+
+    with
+
+    1. func(a, b)
+    2. func(a, b, c)
+    3. func(a, b, c, d)
+    """
+    begin = 0
+    out = ""
+    for match in re.finditer(
+        r"(?P<name>[A-Za-z_]\w*)"
+        r"\("
+            r"(?P<required>[^[]*)"
+            r"\s*(?P<optional>\[.*\])?"
+        r"\)"
+        r"\s*->\s*(?P<rettype>(?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+)\s*:", # return type, optionally qualified
+        doc,
+        re.MULTILINE
+    ):
+        out += doc[begin:match.start()]    
+        todo = match.group("optional")
+        args = match.group("required")
+        # ignore "object" return type advertised by boost::python::make_constructor,
+        # boost::python::self::operator<, etc
+        rettype = OBJECT_PROTOCOL_RETURN_TYPES.get(match.group("name"), match.group("rettype"))
+        for num in itertools.count(1):
+            out += f'{num}. {match.group("name")}({flip_arg_annotations(args)}) -> {rettype}'
+            if todo is None:
+                break
+            m = re.match(r".*\[(?P<head>[^[\]]+)(?P<tail>.*)\].*", todo)
+            if not m:
+                break
+            out += "\n"
+            args += m.group("head")
+            todo = m.group("tail")
+        begin = match.end()
+    out += doc[begin:]
+    return out
+
+function_docstring_preprocessing_hooks.append(expand_overloads)
+
+from functools import partial
+
+# strip trailing colon from boost-python-generated signature 
+function_docstring_preprocessing_hooks.append(partial(re.compile("(-> [A-Za-z_]\w*).*$", flags=re.MULTILINE).sub, r"\1"))
+
 
 def _find_str_end(s, start):
     for i in range(start + 1, len(s)):
