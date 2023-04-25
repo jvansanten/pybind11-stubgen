@@ -61,13 +61,14 @@ def expand_overloads(doc: str) -> str:
     """
     begin = 0
     out = ""
+    count = itertools.count(1)
     for match in re.finditer(
-        r"(?P<name>[A-Za-z_]\w*)"
+        r"^(?P<name>[A-Za-z_]\w*)"
         r"\("
-            r"(?P<required>[^[]*)"
+            r"(?P<required>[^[]*?)"
             r"\s*(?P<optional>\[.*\])?"
         r"\)"
-        r"\s*->\s*(?P<rettype>(?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+)\s*:", # return type, optionally qualified
+        r"\s*->\s*(?P<rettype>(?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+)\s*:$", # return type, optionally qualified
         doc,
         re.MULTILINE
     ):
@@ -77,7 +78,7 @@ def expand_overloads(doc: str) -> str:
         # ignore "object" return type advertised by boost::python::make_constructor,
         # boost::python::self::operator<, etc
         rettype = OBJECT_PROTOCOL_RETURN_TYPES.get(match.group("name"), match.group("rettype"))
-        for num in itertools.count(1):
+        for num in count:
             out += f'{num}. {match.group("name")}({flip_arg_annotations(args)}) -> {rettype}'
             if todo is None:
                 break
