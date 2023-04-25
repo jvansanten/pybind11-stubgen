@@ -97,7 +97,7 @@ function_docstring_preprocessing_hooks.append(expand_overloads)
 from functools import partial
 
 # strip trailing colon from boost-python-generated signature 
-function_docstring_preprocessing_hooks.append(partial(re.compile("(-> [A-Za-z_]\w*).*$", flags=re.MULTILINE).sub, r"\1"))
+function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+).*$", flags=re.MULTILINE).sub, r"\1"))
 
 
 def _find_str_end(s, start):
