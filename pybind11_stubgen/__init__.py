@@ -841,7 +841,7 @@ class ClassStubsGenerator(StubsGenerator):
                 self.alias.append(AliasStubsGenerator(name, member))
             elif inspect.isroutine(member):
                 self.methods.append(
-                    ClassMemberStubsGenerator(name, member, self.klass.__name__, self.klass.__module__)
+                    ClassMemberStubsGenerator(name, member, self.klass.__qualname__, self.klass.__module__)
                 )
             elif name != "__class__" and inspect.isclass(member):
                 if (
