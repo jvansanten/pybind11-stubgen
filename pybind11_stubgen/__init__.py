@@ -728,12 +728,15 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
                 # remove type of self
                 args = ",".join(["self"] + sig.split_arguments()[1:])
             
-            comment = IGNORE_COMMENTS.get(sig.name)
+            # stringize special float values
+            args = re.sub(r"=\s*(nan|[+-]?inf)(\W)?", r'=float("\1")\2', args)
+
+            comment = IGNORE_COMMENTS.get(sig.name, set()).copy()
             if len(self.signatures) > 1:
                 result.append("@typing.overload")
                 if comment:
                     result[-1] = result[-1] + f" # type: ignore[{','.join(comment)}]"
-                    comment = None
+                    comment = set()
             
             result.append(
                 "def {name}({args}) -> {rtype}: {ellipsis} {comment}".format(
