@@ -673,6 +673,23 @@ DUNDER_METHODS = {
     "__iter__",
 }
 
+# always return self
+INPLACE_METHODS = {
+    "__iadd__",
+    "__isub__",
+    "__imul__",
+    "__idiv__",
+}
+
+IGNORE_COMMENTS = {}
+# iadd may be inconsistent with add (if add lacks some overrides)
+for op in "add", "sub", "mul", "div":
+    IGNORE_COMMENTS[f"__i{op}__"] = {"misc"}
+# eq/ne may only be implemented for the specific type
+for op in "eq", "ne":
+    IGNORE_COMMENTS[f"__{op}__"] = {"override"}
+
+
 class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
     def __init__(self, name, free_function, class_name, module_name):
         self.class_name = class_name
@@ -710,15 +727,21 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
             else:
                 # remove type of self
                 args = ",".join(["self"] + sig.split_arguments()[1:])
+            
+            comment = IGNORE_COMMENTS.get(sig.name)
             if len(self.signatures) > 1:
                 result.append("@typing.overload")
-
+                if comment:
+                    result[-1] = result[-1] + f" # type: ignore[{','.join(comment)}]"
+                    comment = None
+            
             result.append(
-                "def {name}({args}) -> {rtype}: {ellipsis}".format(
+                "def {name}({args}) -> {rtype}: {ellipsis} {comment}".format(
                     name=sig.name,
                     args=args,
-                    rtype=sig.rtype,
+                    rtype=self.class_name if sig.name in INPLACE_METHODS else sig.rtype,
                     ellipsis="" if docstring else "...",
+                    comment=f"# type: ignore[{','.join(comment)}]" if comment else ""
                 )
             )
             if docstring:
