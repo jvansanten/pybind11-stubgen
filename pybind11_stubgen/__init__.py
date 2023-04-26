@@ -515,6 +515,11 @@ class StubsGenerator(object):
         docstring = inspect.cleandoc("\n" + docstring)
         return StubsGenerator.indent('"""\n{}\n"""'.format(docstring.strip("\n")))
 
+def is_boost_python_enum(klass):
+    return any(
+        "{module}.{name}".format(module=b.__module__, name=b.__name__) == "Boost.Python.enum"
+        for b in klass.__bases__
+    )
 
 class AttributeStubsGenerator(StubsGenerator):
     def __init__(self, name, attribute):  # type: (str, Any)-> None
@@ -550,11 +555,8 @@ class AttributeStubsGenerator(StubsGenerator):
     def to_lines(self):  # type: () -> List[str]
         # special case for boost-python enums
         attr_type = type(self.attr)
-        if any(
-            "{module}.{name}".format(module=b.__module__, name=b.__name__) == "Boost.Python.enum"
-            for b in attr_type.__bases__
-        ):
-            return ["{name} = {repr}".format(name=self.name, repr=repr(int(self.attr)))]
+        if is_boost_python_enum(attr_type):
+            return ["{name} = {klass}({repr})".format(name=self.name, klass=attr_type.__qualname__, repr=repr(int(self.attr)))]
 
         if self.is_safe_to_use_repr(self.attr):
             return ["{name} = {repr}".format(name=self.name, repr=repr(self.attr))]
@@ -887,6 +889,13 @@ class ClassStubsGenerator(StubsGenerator):
             ):
                 self.fields.append(AttributeStubsGenerator(name, member))
                 # logger.warning("Unknown member %s type : `%s` " % (name, str(type(member))))
+
+        # ensure that names/values come after definitions
+        if is_boost_python_enum(self.klass):
+            ordered = [[], []]
+            for p in self.fields:
+                ordered[p.name in {"names", "values"}].append(p)
+            self.fields = ordered[0] + ordered[1]
 
         for x in itertools.chain(
             self.classes, self.methods, self.properties, self.fields
