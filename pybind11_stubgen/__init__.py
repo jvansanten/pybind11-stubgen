@@ -326,6 +326,9 @@ class PropertySignature(object):
         return FunctionSignature.argument_type(
             FunctionSignature("name", self.setter_args).split_arguments()[1]
         )
+    
+    def __repr__(self):
+        return f"PropertySignature(rtype={self.rtype}, setter_args={self.setter_args}, access_type={self.access_type}"
 
 
 # If true numpy.ndarray[int32[3,3]] will be reduced to numpy.ndarray
@@ -366,6 +369,12 @@ def replace_typing_types(match):
     capitalized = name[0].capitalize() + name[1:]
     return "typing." + capitalized
 
+def preprocess_docstring(doc):
+    if doc is None:
+        return doc
+    for hook in function_docstring_preprocessing_hooks:
+        doc = hook(doc)
+    return doc
 
 class StubsGenerator(object):
     INDENT = " " * 4
@@ -432,10 +441,7 @@ class StubsGenerator(object):
                 r"\s*->\s*"
                 r"(?P<rtype>[^\(\)]+)\s*".format(name=name, balanced_parentheses=".*")
             )
-            docstring = func.__doc__
-
-            for hook in function_docstring_preprocessing_hooks:
-                docstring = hook(docstring)
+            docstring = preprocess_docstring(func.__doc__)
 
             signatures = []
             for line in docstring.split("\n"):
@@ -480,11 +486,11 @@ class StubsGenerator(object):
         if hasattr(prop, "fget") and prop.fget is not None:
             access_type |= PropertySignature.READ_ONLY
             if hasattr(prop.fget, "__doc__") and prop.fget.__doc__ is not None:
-                for line in prop.fget.__doc__.split("\n"):
+                for line in preprocess_docstring(prop.fget.__doc__).split("\n"):
                     if strip_module_name:
                         line = line.replace(module_name + ".", "")
                     m = re.match(
-                        r"\s*(\w*)\((?P<args>[^()]*)\)\s*->\s*(?P<rtype>[^()]+)\s*",
+                        r"(\s*(?P<overload_number>\d+)\.)?\s*(\w*)\((?P<args>[^()]*)\)\s*->\s*(?P<rtype>[^()]+)\s*",
                         line,
                     )
                     if m:
@@ -494,11 +500,11 @@ class StubsGenerator(object):
         if hasattr(prop, "fset") and prop.fset is not None:
             access_type |= PropertySignature.WRITE_ONLY
             if hasattr(prop.fset, "__doc__") and prop.fset.__doc__ is not None:
-                for line in prop.fset.__doc__.split("\n"):
+                for line in preprocess_docstring(prop.fset.__doc__).split("\n"):
                     if strip_module_name:
                         line = line.replace(module_name + ".", "")
                     m = re.match(
-                        r"\s*(\w*)\((?P<args>[^()]*)\)\s*->\s*(?P<rtype>[^()]+)\s*",
+                        r"(\s*(?P<overload_number>\d+)\.)?\s*(\w*)\((?P<args>[^()]*)\)\s*->\s*(?P<rtype>[^()]+)\s*",
                         line,
                     )
                     if m:
@@ -516,8 +522,7 @@ class StubsGenerator(object):
         if docstring is None:
             return ""
 
-        for hook in function_docstring_preprocessing_hooks:
-            docstring = hook(docstring)
+        docstring = preprocess_docstring(docstring)
 
         signature_regex = (
             r"(\s*(?P<overload_number>\d+).\s*)"
