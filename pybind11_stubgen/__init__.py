@@ -387,6 +387,7 @@ class StubsGenerator(object):
             r"(?<!\w)(?P<type>Callable|Dict|[Ii]terator|[Ii]terable|List"
             r"|Optional|Set|Tuple|Union|ItemsView|KeysView|ValuesView)(?!\w)"
         ): replace_typing_types,
+        re.compile(r"(?<!\w)(object)(?!\w)"): "typing.Any",
     }
 
     def parse(self):
