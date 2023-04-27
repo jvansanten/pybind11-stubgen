@@ -17,6 +17,9 @@ _visited_objects = []
 # A list of function docstring pre-processing hooks
 function_docstring_preprocessing_hooks: List[Callable[[str], str]] = []
 
+# A list of signature post-processing hooks
+function_signature_postprocessing_hooks: list[Callable[[list["FunctionSignature"]], list["FunctionSignature"]]] = []
+
 def flip_arg_annotations(doc: str) -> str:
     """
     replace "(type)arg" with "arg: type". type may contain qualifiers, e.g. "foo.bar.type"
@@ -94,11 +97,26 @@ def expand_overloads(doc: str) -> str:
 
 function_docstring_preprocessing_hooks.append(expand_overloads)
 
-from functools import partial
+from functools import partial, reduce
 
 # strip trailing colon from boost-python-generated signature 
 function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+).*$", flags=re.MULTILINE).sub, r"\1"))
 
+def remove_shadowing_int_overloads(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
+    """
+    Remove int overloads if a float overload is present. mypy assumes that float
+    captures int, even though the conversion loses precision
+    """
+    if len(signatures) > 1:
+        argtypes = [set(s.argtypes.items()) for s in signatures]
+        common = reduce(set.intersection, argtypes[1:], argtypes[0])
+        unique = [tuple(dict(a.difference(common)).values()) for a in argtypes]
+        if ("float",) in unique and ("int",) in unique:
+            skip = unique.index(("int",))
+            return [s for s,i in enumerate(signatures) if i != skip]
+    return signatures
+
+function_signature_postprocessing_hooks.append(remove_shadowing_int_overloads)
 
 def _find_str_end(s, start):
     for i in range(start + 1, len(s)):
@@ -189,6 +207,7 @@ class FunctionSignature(object):
         self.name = name
         self.args = args
         self.rtype = rtype
+        self.argtypes: dict[str, str] = {}
 
         if validate:
             invalid_defaults, self.args = replace_default_pybind11_repr(self.args)
@@ -209,7 +228,13 @@ class FunctionSignature(object):
                 sig=self
             )
             try:
-                ast.parse(function_def_str)
+                parsed = ast.parse(function_def_str)
+                f: ast.FunctionDef = parsed.body[0]
+                for arg in itertools.chain(f.args.posonlyargs, f.args.args, f.args.kwonlyargs):
+                    if isinstance(arg.annotation, ast.Name):
+                        self.argtypes[arg.arg] = arg.annotation.id
+                    elif isinstance(arg.annotation, ast.Str):
+                        self.argtypes[arg.arg] = arg.annotation.value
             except SyntaxError as e:
                 FunctionSignature.n_invalid_signatures += 1
                 if FunctionSignature.signature_downgrade:
@@ -240,6 +265,9 @@ class FunctionSignature(object):
 
     def __hash__(self):
         return hash((self.name, self.args, self.rtype))
+
+    def __repr__(self):
+        return f"FunctionSignature({self.name}, args={self.args}, rtype={self.rtype})"
 
     def split_arguments(self):
         if len(self.args.strip()) == 0:
@@ -428,8 +456,13 @@ class StubsGenerator(object):
             for sig in signatures:
                 sig.args = StubsGenerator.apply_classname_replacements(sig.args)
                 sig.rtype = StubsGenerator.apply_classname_replacements(sig.rtype)
+            
+            signatures = list(set(signatures))
 
-            return sorted(list(set(signatures)), key=lambda fs: fs.args)
+            for sighook in function_signature_postprocessing_hooks:
+                signatures = sighook(signatures)
+
+            return sorted(signatures, key=lambda fs: fs.args)
         except AttributeError:
             return []
 
