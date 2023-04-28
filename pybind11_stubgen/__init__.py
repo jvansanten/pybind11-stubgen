@@ -82,15 +82,19 @@ def expand_overloads(doc: str) -> str:
         # boost::python::self::operator<, etc
         rettype = OBJECT_PROTOCOL_RETURN_TYPES.get(match.group("name"), match.group("rettype"))
         for num in count:
-            out += f'{num}. {match.group("name")}({flip_arg_annotations(args)}) -> {rettype}'
-            if todo is None:
+            # check for optional args of the form '[, (float)arg2=0.0 [, (float)arg3=1.0]]'
+            m = re.match(r".*?\[(?P<head>[^[\]]+)(?P<tail>\[[^[\]]+\])?\].*?", todo or "")
+            # emit a signature if next argument is required or the arguments are over
+            if not m or "=" not in m.group("head"):
+                out += f'{num}. {match.group("name")}({flip_arg_annotations(args)}) -> {rettype}\n'
+            if m:
+                args += m.group("head").strip()
+                try:
+                    todo = m.group("tail")
+                except IndexError:
+                    todo = None
+            else:
                 break
-            m = re.match(r".*\[(?P<head>[^[\]]+)(?P<tail>.*)\].*", todo)
-            if not m:
-                break
-            out += "\n"
-            args += m.group("head")
-            todo = m.group("tail")
         begin = match.end()
     out += doc[begin:]
     return out
