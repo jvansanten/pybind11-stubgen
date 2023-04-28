@@ -106,18 +106,37 @@ from functools import partial, reduce
 # strip trailing colon from boost-python-generated signature 
 function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+).*$", flags=re.MULTILINE).sub, r"\1"))
 
-def remove_shadowing_int_overloads(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
+def remove_shadowing_overloads(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
     """
     Remove int overloads if a float overload is present. mypy assumes that float
     captures int, even though the conversion loses precision
+
+    Furthermore, pure_virtual adds a default implementation that claims to
+    return None, but actually just raises an exception. Remove it.
     """
     if len(signatures) > 1:
         argtypes = [set(s.argtypes.items()) for s in signatures]
         common = reduce(set.intersection, argtypes[1:], argtypes[0])
         unique = [tuple(dict(a.difference(common)).values()) for a in argtypes]
+        skip = set()
         if ("float",) in unique and ("int",) in unique:
-            skip = unique.index(("int",))
-            return [s for s,i in enumerate(signatures) if i != skip]
+            skip.add(unique.index(("int",)))
+        else:
+            groups = {}
+            for i, uargs in enumerate(unique):
+                if not uargs in groups:
+                    groups[uargs] = [i]
+                else:
+                    groups[uargs].append(i)
+            for indices in groups.values():
+                if len(indices) > 1:
+                    for i in reversed(sorted(indices)):
+                        if signatures[i].rtype == "None":
+                            skip.add(i)
+                            break
+        if skip:
+            return [s for s,i in enumerate(signatures) if i not in skip]
+
     return signatures
 
 def qualify_default_values(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
@@ -142,7 +161,7 @@ def qualify_default_values(signatures: list["FunctionSignature"]) -> list["Funct
     return signatures
 
 
-function_signature_postprocessing_hooks.append(remove_shadowing_int_overloads)
+function_signature_postprocessing_hooks.append(remove_shadowing_overloads)
 function_signature_postprocessing_hooks.append(qualify_default_values)
 
 def _find_str_end(s, start):
