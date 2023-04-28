@@ -120,7 +120,30 @@ def remove_shadowing_int_overloads(signatures: list["FunctionSignature"]) -> lis
             return [s for s,i in enumerate(signatures) if i != skip]
     return signatures
 
+def qualify_default_values(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
+    """
+    Replace default args of the form
+    
+    icecube._dataclasses.I3Position=I3Position(0,0,0)
+
+    with
+
+    icecube._dataclasses.I3Position=icecube._dataclasses.I3Position(0,0,0)
+    """
+    for sig in signatures:
+        if not "=" in sig.args:
+            continue
+        for dtype in set(sig.argtypes.values()):
+            if "." in dtype:
+                parts = dtype.split(".")
+                tail = parts.pop(-1)
+                head = ".".join(parts)
+                sig.args = sig.args.replace(f"={tail}", f"={head}.{tail}")
+    return signatures
+
+
 function_signature_postprocessing_hooks.append(remove_shadowing_int_overloads)
+function_signature_postprocessing_hooks.append(qualify_default_values)
 
 def _find_str_end(s, start):
     for i in range(start + 1, len(s)):
