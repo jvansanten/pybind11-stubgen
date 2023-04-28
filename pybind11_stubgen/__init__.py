@@ -187,6 +187,15 @@ def replace_default_pybind11_repr(line):
     return default_reprs, _default_pybind11_repr_re.sub(replacement, line)
 
 
+class ExtractAnnotation(ast.NodeVisitor):
+    def visit_Name(self, node: ast.Name) -> str:
+        return node.id
+    def visit_Str(self, node: ast.Str) -> str:
+        return node.value
+    def visit_Attribute(self, node: ast.Attribute) -> Any:
+        return f"{self.visit(node.value)}.{node.attr}"
+
+
 class FunctionSignature(object):
     # When True don't raise an error when invalid signatures/defaultargs are
     # encountered (yes, global variables, blame me)
@@ -235,10 +244,7 @@ class FunctionSignature(object):
                 parsed = ast.parse(function_def_str)
                 f: ast.FunctionDef = parsed.body[0]
                 for arg in itertools.chain(f.args.posonlyargs, f.args.args, f.args.kwonlyargs):
-                    if isinstance(arg.annotation, ast.Name):
-                        self.argtypes[arg.arg] = arg.annotation.id
-                    elif isinstance(arg.annotation, ast.Str):
-                        self.argtypes[arg.arg] = arg.annotation.value
+                    self.argtypes[arg.arg] = ExtractAnnotation().visit(arg.annotation)
             except SyntaxError as e:
                 FunctionSignature.n_invalid_signatures += 1
                 if FunctionSignature.signature_downgrade:
