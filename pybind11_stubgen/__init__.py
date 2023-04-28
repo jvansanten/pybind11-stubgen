@@ -896,9 +896,12 @@ class ClassStubsGenerator(StubsGenerator):
         "__dict__",
         "__weakref__",
         "__annotations__",
+        "__instance_size__",
+        "__getstate_manages_dict__",
+        "__safe_for_unpickling__",
     )
     PYBIND11_ATTRIBUTES_BLACKLIST = ("__entries",)
-    METHODS_BLACKLIST = ("__dir__", "__sizeof__", "__setattr__")
+    METHODS_BLACKLIST = ("__dir__", "__sizeof__", "__setattr__", "__getstate__", "__setstate__", "__copy__", "__deepcopy__", "__str__")
     BASE_CLASS_BLACKLIST = ("pybind11_object", "object")
     CLASS_NAME_BLACKLIST = ("pybind11_type",)
 
