@@ -135,7 +135,7 @@ def remove_shadowing_overloads(signatures: list["FunctionSignature"]) -> list["F
                             skip.add(i)
                             break
         if skip:
-            return [s for s,i in enumerate(signatures) if i not in skip]
+            return [s for i,s in enumerate(signatures) if i not in skip]
 
     return signatures
 
