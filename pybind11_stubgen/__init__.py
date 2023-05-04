@@ -50,56 +50,8 @@ OBJECT_PROTOCOL_RETURN_TYPES = {
     "__str__": "str",
 }
 
-def expand_overloads(doc: str) -> str:
-    """
-    Replace
-
-    func( a, b [, c [, d]]) -> f
-
-    with
-
-    1. func(a, b)
-    2. func(a, b, c)
-    3. func(a, b, c, d)
-    """
-    begin = 0
-    out = ""
-    count = itertools.count(1)
-    for match in re.finditer(
-        r"^(?P<name>[A-Za-z_]\w*)"
-        r"\("
-            r"(?P<required>[^[]*?)"
-            r"\s*(?P<optional>\[.*\])?"
-        r"\)"
-        r"\s*->\s*(?P<rettype>(?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+)\s*:$", # return type, optionally qualified
-        doc,
-        re.MULTILINE
-    ):
-        out += doc[begin:match.start()]    
-        todo = match.group("optional")
-        args = match.group("required")
-        # ignore "object" return type advertised by boost::python::make_constructor,
-        # boost::python::self::operator<, etc
-        rettype = OBJECT_PROTOCOL_RETURN_TYPES.get(match.group("name"), match.group("rettype"))
-        for num in count:
-            # check for optional args of the form '[, (float)arg2=0.0 [, (float)arg3=1.0]]'
-            m = re.match(r".*?\[(?P<head>[^[\]]+)(?P<tail>\[[^[\]]+\])?\].*?", todo or "")
-            # emit a signature if next argument is required or the arguments are over
-            if not m or "=" not in m.group("head"):
-                out += f'{num}. {match.group("name")}({flip_arg_annotations(args)}) -> {rettype}\n'
-            if m:
-                args += m.group("head").strip()
-                try:
-                    todo = m.group("tail")
-                except IndexError:
-                    todo = None
-            else:
-                break
-        begin = match.end()
-    out += doc[begin:]
-    return out
-
-function_docstring_preprocessing_hooks.append(expand_overloads)
+from .boost_python_signature import transform_signatures
+function_docstring_preprocessing_hooks.append(transform_signatures)
 
 from functools import partial, reduce
 
@@ -160,7 +112,12 @@ def qualify_default_values(signatures: list["FunctionSignature"]) -> list["Funct
                 sig.args = sig.args.replace(f"={tail}", f"={head}.{tail}")
     return signatures
 
+def replace_object_protocol_rtypes(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
+    for sig in signatures:
+        sig.rtype = OBJECT_PROTOCOL_RETURN_TYPES.get(sig.name, sig.rtype)
+    return signatures
 
+function_signature_postprocessing_hooks.append(replace_object_protocol_rtypes)
 function_signature_postprocessing_hooks.append(remove_shadowing_overloads)
 function_signature_postprocessing_hooks.append(qualify_default_values)
 
@@ -286,7 +243,8 @@ class FunctionSignature(object):
                 parsed = ast.parse(function_def_str)
                 f: ast.FunctionDef = parsed.body[0]
                 for arg in itertools.chain(f.args.posonlyargs, f.args.args, f.args.kwonlyargs):
-                    self.argtypes[arg.arg] = ExtractAnnotation().visit(arg.annotation)
+                    if arg.annotation is not None:
+                        self.argtypes[arg.arg] = ExtractAnnotation().visit(arg.annotation)
             except SyntaxError as e:
                 FunctionSignature.n_invalid_signatures += 1
                 if FunctionSignature.signature_downgrade:
