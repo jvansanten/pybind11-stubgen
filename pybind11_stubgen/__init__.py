@@ -482,7 +482,7 @@ class StubsGenerator(object):
             for sighook in function_signature_postprocessing_hooks:
                 signatures = sighook(signatures)
 
-            return sorted(signatures, key=lambda fs: fs.args)
+            return sorted(set(signatures), key=lambda fs: fs.args)
         except AttributeError:
             raise
             return []
