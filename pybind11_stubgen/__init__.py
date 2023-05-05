@@ -741,7 +741,8 @@ IGNORE_COMMENTS = {}
 for op in "add", "sub", "mul", "div":
     IGNORE_COMMENTS[f"__i{op}__"] = {"misc"}
 # eq/ne may only be implemented for the specific type
-for op in "eq", "ne":
+# ditto for key types in mappings
+for op in "eq", "ne", "contains", "getitem", "delitem":
     IGNORE_COMMENTS[f"__{op}__"] = {"override"}
 
 
