@@ -8,7 +8,7 @@ import re
 import sys
 import warnings
 from argparse import ArgumentParser
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Sequence, Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -432,6 +432,9 @@ class StubsGenerator(object):
 
         if module_name == "builtins":
             return class_name
+        elif module_name == "typing":
+            # include type args (e.g. Sequence[int])
+            return repr(klass)
         else:
             return "{module}.{klass}".format(module=module_name, klass=class_name)
 
@@ -902,6 +905,11 @@ class ClassStubsGenerator(StubsGenerator):
         _visited_objects.append(self.klass)
 
         bases = inspect.getmro(self.klass)[1:]
+
+        if hasattr(self.klass, "__key_type__"):
+            bases = bases + (Mapping[self.klass.__key_type__(), self.klass.__value_type__()],)
+        elif hasattr(self.klass, "__value_type__"):
+            bases = bases + (Sequence[self.klass.__value_type__()],)
 
         def is_base_member(name, member):
             for base in bases:
