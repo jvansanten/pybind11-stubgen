@@ -484,6 +484,7 @@ class StubsGenerator(object):
 
             return sorted(signatures, key=lambda fs: fs.args)
         except AttributeError:
+            raise
             return []
 
     @staticmethod
