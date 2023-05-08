@@ -744,6 +744,9 @@ for op in "add", "sub", "mul", "div":
 # ditto for key types in mappings
 for op in "eq", "ne", "contains", "getitem", "delitem":
     IGNORE_COMMENTS[f"__{op}__"] = {"override"}
+for f in "keys", "values", "items":
+    IGNORE_COMMENTS[f] = {"override"}
+
 
 
 class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
