@@ -496,7 +496,7 @@ class StubsGenerator(object):
         setter_args = "None"
         access_type = PropertySignature.NONE
 
-        strip_module_name = module_name is not None
+        strip_module_name = False
 
         if hasattr(prop, "fget") and prop.fget is not None:
             access_type |= PropertySignature.READ_ONLY
