@@ -130,7 +130,7 @@ def get_container_equivalent(klass: Type):
 
 def replace_container_types(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
     for sig in signatures:
-        for arg in sig._args:
+        for arg in sig._args[1:]:
             if arg.annotation is None:
                 continue
             if equivalent := get_container_equivalent(arg.get_class(sig.module_name)):
@@ -357,6 +357,9 @@ class FunctionSignature(object):
 
     def __repr__(self):
         return f"FunctionSignature({self.name}, args={self.args}, rtype={self.rtype})"
+
+    def __str__(self):
+        return f'{self.name}({", ".join(str(arg) for arg in self._args)}) -> {self.rtype}:'
 
     def split_arguments(self):
         if len(self.args.strip()) == 0:
@@ -765,11 +768,7 @@ class FreeFunctionStubsGenerator(StubsGenerator):
         for sig in self.signatures:
             if len(self.signatures) > 1:
                 result.append("@typing.overload")
-            result.append(
-                "def {name}({args}) -> {rtype}:".format(
-                    name=sig.name, args=sig.args, rtype=sig.rtype
-                )
-            )
+            result.append(f"def {sig}")
             if docstring:
                 result.append(self.format_docstring(docstring))
                 docstring = None  # don't print docstring for other overloads
@@ -845,29 +844,24 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
                 "Docstring is empty for '%s'" % self.fully_qualified_name(self.member)
             )
         for sig in self.signatures:
-            args = sig.args
-            sargs = args.strip()
             # detect boost::python self
-            if sargs:
-                first = sig.split_arguments()[0].split(":")
-                arg = first[0].strip()
-                argt = first[-1].strip()
-                if argt == self.class_name or self.name in DUNDER_METHODS:
-                    sargs = sargs.replace(arg, "self")
-            
-            if not sargs.startswith("self"):
-                if sargs.startswith("cls"):
-                    result.append("@classmethod")
-                    # remove type of cls
-                    args = ",".join(["cls"] + sig.split_arguments()[1:])
+            if sig._args:
+                first = sig._args[0]
+                # detect boost::python self
+                if first.annotation == self.class_name or sig.name in DUNDER_METHODS:
+                    first.name = "self"
+                if first.name == "self":
+                    first.annotation = None
                 else:
-                    result.append("@staticmethod")
+                    result.append("@classmethod")
+                    first.name = "cls"
+                    first.annotation = None
+            # no arg -> staticmethod
             else:
-                # remove type of self
-                args = ",".join(["self"] + sig.split_arguments()[1:])
+                result.append("@staticmethod")
             
-            # stringize special float values
-            args = re.sub(r"=\s*(nan|[+-]?inf)(\W)?", r'=float("\1")\2', args)
+            if sig.name in INPLACE_METHODS:
+                sig.rtype = self.class_name
 
             comment = IGNORE_COMMENTS.get(sig.name, set()).copy()
             if len(self.signatures) > 1:
@@ -877,10 +871,8 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
                     comment = set()
             
             result.append(
-                "def {name}({args}) -> {rtype}: {ellipsis} {comment}".format(
-                    name=sig.name,
-                    args=args,
-                    rtype=self.class_name if sig.name in INPLACE_METHODS else sig.rtype,
+                "def {sig} {ellipsis} {comment}".format(
+                    sig=sig,
                     ellipsis="" if docstring else "...",
                     comment=f"# type: ignore[{','.join(comment)}]" if comment else ""
                 )
