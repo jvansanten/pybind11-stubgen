@@ -21,7 +21,9 @@ _visited_objects = []
 function_docstring_preprocessing_hooks: List[Callable[[str], str]] = []
 
 # A list of signature post-processing hooks
-function_signature_postprocessing_hooks: list[Callable[[list["FunctionSignature"]], list["FunctionSignature"]]] = []
+function_signature_postprocessing_hooks: list[Callable[["FunctionSignature"], None]] = []
+
+function_overload_filters: list[Callable[[list["FunctionSignature"]], list["FunctionSignature"]]] = []
 
 def flip_arg_annotations(doc: str) -> str:
     """
@@ -94,7 +96,7 @@ def remove_shadowing_overloads(signatures: list["FunctionSignature"]) -> list["F
 
     return signatures
 
-def qualify_default_values(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
+def qualify_default_values(sig: "FunctionSignature") -> None:
     """
     Replace default args of the form
     
@@ -104,16 +106,14 @@ def qualify_default_values(signatures: list["FunctionSignature"]) -> list["Funct
 
     icecube._dataclasses.I3Position=icecube._dataclasses.I3Position(0,0,0)
     """
-    for sig in signatures:
-        if not "=" in sig.args:
-            continue
-        for dtype in set(sig.argtypes.values()):
-            if "." in dtype:
-                parts = dtype.split(".")
-                tail = parts.pop(-1)
-                head = ".".join(parts)
-                sig.args = sig.args.replace(f"={tail}", f"={head}.{tail}")
-    return signatures
+    if not "=" in sig.args:
+        return
+    for dtype in set(sig.argtypes.values()):
+        if "." in dtype:
+            parts = dtype.split(".")
+            tail = parts.pop(-1)
+            head = ".".join(parts)
+            sig.args = sig.args.replace(f"={tail}", f"={head}.{tail}")
 
 def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
     if isinstance(klass, Type):
@@ -128,24 +128,29 @@ def get_container_equivalent(klass: Type):
         return Sequence[_type_or_union(klass.__value_type__())]
 
 
-def replace_container_types(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
-    for sig in signatures:
-        for arg in sig._args[1:]:
-            if arg.annotation is None:
-                continue
-            if equivalent := get_container_equivalent(arg.get_class(sig.module_name)):
-                arg.annotation = repr(equivalent)
-    return signatures
+def replace_container_types(sig: "FunctionSignature") -> None:
+    for arg in sig._args[1:]:
+        if arg.annotation is None:
+            continue
+        if equivalent := get_container_equivalent(arg.get_class(sig.module_name)):
+            arg.annotation = repr(equivalent)
 
-def replace_object_protocol_rtypes(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
-    for sig in signatures:
-        sig.rtype = OBJECT_PROTOCOL_RETURN_TYPES.get(sig.name, sig.rtype)
-    return signatures
+def replace_object_protocol_rtypes(sig: "FunctionSignature") -> None:
+    sig.rtype = OBJECT_PROTOCOL_RETURN_TYPES.get(sig.name, sig.rtype)
+
+def treat_object_as_any(sig: "FunctionSignature") -> None:
+    for arg in sig._args:
+        if arg.annotation == "object":
+            arg.annotation = "typing.Any"
+    if sig.rtype == "object":
+        sig.rtype = "typing.Any"
+
+function_overload_filters.append(remove_shadowing_overloads)
 
 function_signature_postprocessing_hooks.append(replace_object_protocol_rtypes)
-function_signature_postprocessing_hooks.append(remove_shadowing_overloads)
 function_signature_postprocessing_hooks.append(qualify_default_values)
 function_signature_postprocessing_hooks.append(replace_container_types)
+function_signature_postprocessing_hooks.append(treat_object_as_any)
 
 def _find_str_end(s, start):
     for i in range(start + 1, len(s)):
@@ -562,7 +567,11 @@ class StubsGenerator(object):
             signatures = list(set(signatures))
 
             for sighook in function_signature_postprocessing_hooks:
-                signatures = sighook(signatures)
+                for sig in signatures:
+                    sighook(sig)
+
+            for sigfilter in function_overload_filters:
+                signatures = sigfilter(signatures)
 
             return sorted(set(signatures), key=lambda fs: fs.args)
         except AttributeError:
