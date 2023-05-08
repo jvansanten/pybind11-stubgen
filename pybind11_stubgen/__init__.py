@@ -1,4 +1,6 @@
 import ast
+import builtins
+import dataclasses
 import importlib
 import inspect
 import itertools
@@ -6,9 +8,10 @@ import logging
 import os
 import re
 import sys
+from types import ModuleType
 import warnings
 from argparse import ArgumentParser
-from typing import Any, Callable, Dict, List, Optional, Set, Sequence, Mapping
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Set, Sequence, Mapping, Type, Union
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +56,7 @@ OBJECT_PROTOCOL_RETURN_TYPES = {
 from .boost_python_signature import transform_signatures
 function_docstring_preprocessing_hooks.append(transform_signatures)
 
-from functools import partial, reduce
+from functools import partial, reduce, cache
 
 # strip trailing colon from boost-python-generated signature 
 function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+).*$", flags=re.MULTILINE).sub, r"\1"))
@@ -112,6 +115,28 @@ def qualify_default_values(signatures: list["FunctionSignature"]) -> list["Funct
                 sig.args = sig.args.replace(f"={tail}", f"={head}.{tail}")
     return signatures
 
+def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
+    if isinstance(klass, Type):
+        return klass
+    else:
+        return Union[klass]
+
+def get_container_equivalent(klass: Type):
+    if hasattr(klass, "__key_type__"):
+        return Mapping[_type_or_union(klass.__key_type__()), _type_or_union(klass.__value_type__())]
+    elif hasattr(klass, "__value_type__"):
+        return Sequence[_type_or_union(klass.__value_type__())]
+
+
+def replace_container_types(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
+    for sig in signatures:
+        for arg in sig._args:
+            if arg.annotation is None:
+                continue
+            if equivalent := get_container_equivalent(arg.get_class(sig.module_name)):
+                arg.annotation = repr(equivalent)
+    return signatures
+
 def replace_object_protocol_rtypes(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
     for sig in signatures:
         sig.rtype = OBJECT_PROTOCOL_RETURN_TYPES.get(sig.name, sig.rtype)
@@ -120,6 +145,7 @@ def replace_object_protocol_rtypes(signatures: list["FunctionSignature"]) -> lis
 function_signature_postprocessing_hooks.append(replace_object_protocol_rtypes)
 function_signature_postprocessing_hooks.append(remove_shadowing_overloads)
 function_signature_postprocessing_hooks.append(qualify_default_values)
+function_signature_postprocessing_hooks.append(replace_container_types)
 
 def _find_str_end(s, start):
     for i in range(start + 1, len(s)):
@@ -194,6 +220,52 @@ class ExtractAnnotation(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> Any:
         return f"{self.visit(node.value)}.{node.attr}"
 
+@dataclasses.dataclass
+class Argument:
+    name: str
+    annotation: str | None
+    default: ast.Expr | None
+
+    def __str__(self) -> str:
+        out = f"{self.name}"
+        if self.annotation is not None:
+            out += f": {self.annotation}"
+        if self.default is not None:
+            out += f"={ast.unparse(self.default)}"
+        return out
+
+    @staticmethod
+    @cache
+    def _get_annotation_class(current_module: ModuleType, annotation: str) -> Type:
+        parts = annotation.split(".")
+        # LEGB rule
+        # name in current module (enclosing scope)
+        try:
+            ns = current_module
+            for k in parts:
+                ns = getattr(ns, k)
+            return ns
+        except AttributeError:
+            ...
+        # fully-qualified name from some other module
+        module_path = []
+        for i, k in enumerate(parts):
+            module_path.append(k)
+            try:
+                ns = importlib.import_module(".".join(parts[:i+1]))
+                for j in range(i+1, len(parts)):
+                    ns = getattr(ns, parts[j])
+                return ns
+            except ModuleNotFoundError:
+                continue
+        
+        # built-in
+        return getattr(builtins, parts[-1])
+        
+
+    def get_class(self, current_module: str) -> Type:
+        return self._get_annotation_class(importlib.import_module(current_module), self.annotation)
+        
 
 class FunctionSignature(object):
     # When True don't raise an error when invalid signatures/defaultargs are
@@ -215,10 +287,12 @@ class FunctionSignature(object):
             0 if cls.ignore_invalid_defaultarg else cls.n_invalid_default_values
         ) + (0 if cls.ignore_invalid_signature else cls.n_invalid_signatures)
 
-    def __init__(self, name, args="*args, **kwargs", rtype="None", validate=True):
+    def __init__(self, name, module_name, args="*args, **kwargs", rtype="None", validate=True):
         self.name = name
+        self.module_name = module_name
         self.args = args
         self.rtype = rtype
+        self._args: list[Argument] = []
         self.argtypes: dict[str, str] = {}
 
         if validate:
@@ -242,9 +316,14 @@ class FunctionSignature(object):
             try:
                 parsed = ast.parse(function_def_str)
                 f: ast.FunctionDef = parsed.body[0]
-                for arg in itertools.chain(f.args.posonlyargs, f.args.args, f.args.kwonlyargs):
-                    if arg.annotation is not None:
-                        self.argtypes[arg.arg] = ExtractAnnotation().visit(arg.annotation)
+                f.args.defaults
+                assert not f.args.kwonlyargs
+                assert not f.args.posonlyargs
+                defaults = [None] * (len(f.args.args)-len(f.args.defaults)) + f.args.defaults
+                for arg, default in zip(f.args.args, defaults):
+                    annotation = None if arg.annotation is None else ExtractAnnotation().visit(arg.annotation)
+                    self.argtypes[arg.arg] = annotation
+                    self._args.append(Argument(arg.arg, annotation, default))
             except SyntaxError as e:
                 FunctionSignature.n_invalid_signatures += 1
                 if FunctionSignature.signature_downgrade:
@@ -464,7 +543,7 @@ class StubsGenerator(object):
                     args = m.group("args")
                     rtype = m.group("rtype")
                     if _is_balanced(args):
-                        signatures.append(FunctionSignature(name, args, rtype))
+                        signatures.append(FunctionSignature(name, module_name, args, rtype))
 
             # strip module name if provided
             if module_name:
@@ -911,10 +990,8 @@ class ClassStubsGenerator(StubsGenerator):
 
         bases = inspect.getmro(self.klass)[1:]
 
-        if hasattr(self.klass, "__key_type__"):
-            bases = bases + (Mapping[self.klass.__key_type__(), self.klass.__value_type__()],)
-        elif hasattr(self.klass, "__value_type__"):
-            bases = bases + (Sequence[self.klass.__value_type__()],)
+        if equivalent := get_container_equivalent(self.klass):
+            bases = bases + (equivalent,)
 
         def is_base_member(name, member):
             for base in bases:
