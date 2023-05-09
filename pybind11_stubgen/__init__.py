@@ -566,8 +566,8 @@ class StubsGenerator(object):
             
             signatures = list(set(signatures))
 
-            for sighook in function_signature_postprocessing_hooks:
-                for sig in signatures:
+            for sig in signatures:
+                for sighook in function_signature_postprocessing_hooks:
                     sighook(sig)
 
             for sigfilter in function_overload_filters:
