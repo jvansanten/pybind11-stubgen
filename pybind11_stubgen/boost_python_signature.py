@@ -58,7 +58,7 @@ def make_signature() -> pp.ParserElement:
     arg_list = pp.delimited_list(
         pp.Group(expr), pp.Literal(",") + pp.ZeroOrMore(pp.White()), combine=True
     )
-    function_call = qualname + pp.Literal("(") + arg_list + pp.Literal(")")
+    function_call = qualname + pp.Literal("(") + pp.Opt(arg_list) + pp.Literal(")")
     literal_list = pp.Literal("[") + pp.Opt(arg_list) + pp.Literal("]")
 
     expr <<= pp.Combine(literal | literal_list | function_call | qualname)
