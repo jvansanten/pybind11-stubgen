@@ -862,9 +862,7 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
                 if first.name == "self":
                     first.annotation = None
                 else:
-                    result.append("@classmethod")
-                    first.name = "cls"
-                    first.annotation = None
+                    result.append("@staticmethod")
             # no arg -> staticmethod
             else:
                 result.append("@staticmethod")
