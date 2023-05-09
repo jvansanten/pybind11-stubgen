@@ -116,7 +116,9 @@ def qualify_default_values(sig: "FunctionSignature") -> None:
             sig.args = sig.args.replace(f"={tail}", f"={head}.{tail}")
 
 def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
-    if isinstance(klass, Type):
+    if klass is None:
+        return Any
+    elif isinstance(klass, Type):
         return klass
     else:
         return Union[klass]
