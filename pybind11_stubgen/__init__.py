@@ -119,9 +119,11 @@ def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
     if klass is None:
         return Any
     elif isinstance(klass, Type):
-        return klass
-    else:
+        return get_container_equivalent(klass) or klass
+    elif isinstance(klass, tuple):
         return Union[klass]
+    else:
+        return klass
 
 def get_container_equivalent(klass: Type):
     """Replace container an annotation that covers the types implicitly convertible to that container"""
