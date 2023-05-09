@@ -142,6 +142,7 @@ def transform_signatures(doc: str):
     for tokens, start, end in FunctionDef.scan_string(doc):
         out += doc[pos:start]
         out += "\n".join(format_signature(tokens))
+        out += "\n"
         pos = end
     out += doc[pos:]
     return out
