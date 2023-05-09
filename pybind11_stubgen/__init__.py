@@ -122,9 +122,12 @@ def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
         return Union[klass]
 
 def get_container_equivalent(klass: Type):
+    """Replace container an annotation that covers the types implicitly convertible to that container"""
     if hasattr(klass, "__key_type__"):
+        # std::map
         return Mapping[_type_or_union(klass.__key_type__()), _type_or_union(klass.__value_type__())]
-    elif hasattr(klass, "__value_type__"):
+    elif hasattr(klass, "__value_type__") and not (hasattr(klass, "pre_order_iterator") or hasattr(klass, "pre_order_iter")):
+        # std::vector, but none of the various trees
         return Sequence[_type_or_union(klass.__value_type__())]
 
 
@@ -828,9 +831,9 @@ IGNORE_COMMENTS = {}
 for op in "add", "sub", "mul", "div":
     IGNORE_COMMENTS[f"__i{op}__"] = {"misc"}
 # eq/ne may only be implemented for the specific type
-# ditto for key types in mappings
-for op in "eq", "ne", "contains", "getitem", "delitem":
+for op in "eq", "ne":
     IGNORE_COMMENTS[f"__{op}__"] = {"override"}
+# these still return lists, py2 style
 for f in "keys", "values", "items":
     IGNORE_COMMENTS[f] = {"override"}
 
