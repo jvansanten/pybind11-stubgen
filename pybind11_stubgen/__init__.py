@@ -106,14 +106,12 @@ def qualify_default_values(sig: "FunctionSignature") -> None:
 
     icecube._dataclasses.I3Position=icecube._dataclasses.I3Position(0,0,0)
     """
-    if not "=" in sig.args:
-        return
-    for dtype in set(sig.argtypes.values()):
-        if "." in dtype:
-            parts = dtype.split(".")
+    for arg in sig._args:
+        if arg.default is not None and "." in arg.annotation:
+            parts = arg.annotation.split(".")
             tail = parts.pop(-1)
             head = ".".join(parts)
-            sig.args = sig.args.replace(f"={tail}", f"={head}.{tail}")
+            arg.default = ast.parse(ast.unparse(arg.default).replace(tail, f"{head}.{tail}")).body[0]
 
 def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
     if klass is None:
