@@ -222,13 +222,16 @@ def replace_default_pybind11_repr(line):
     return default_reprs, _default_pybind11_repr_re.sub(replacement, line)
 
 
-class ExtractAnnotation(ast.NodeVisitor):
-    def visit_Name(self, node: ast.Name) -> str:
-        return node.id
-    def visit_Str(self, node: ast.Str) -> str:
-        return node.value
-    def visit_Attribute(self, node: ast.Attribute) -> Any:
-        return f"{self.visit(node.value)}.{node.attr}"
+def get_args(function_def_str: str):
+    parsed = ast.parse(function_def_str)
+    f: ast.FunctionDef = parsed.body[0]
+    f.args.defaults
+    assert not f.args.kwonlyargs
+    assert not f.args.posonlyargs
+    defaults = [None] * (len(f.args.args)-len(f.args.defaults)) + f.args.defaults
+    for arg, default in zip(f.args.args, defaults):
+        annotation = None if arg.annotation is None else ast.unparse(arg.annotation)
+        yield Argument(arg.arg, annotation, default)
 
 @dataclasses.dataclass
 class Argument:
@@ -273,7 +276,10 @@ class Argument:
         return getattr(builtins, parts[-1])
         
 
-    def get_class(self, current_module: str) -> Type:
+    def get_class(self, current_module: str) -> Optional[Type]:
+        # skip subscripted generics, these are never going to be wrapped classes
+        if "[" in self.annotation:
+            return None
         return self._get_annotation_class(importlib.import_module(current_module), self.annotation)
         
 
@@ -324,16 +330,9 @@ class FunctionSignature(object):
                 sig=self
             )
             try:
-                parsed = ast.parse(function_def_str)
-                f: ast.FunctionDef = parsed.body[0]
-                f.args.defaults
-                assert not f.args.kwonlyargs
-                assert not f.args.posonlyargs
-                defaults = [None] * (len(f.args.args)-len(f.args.defaults)) + f.args.defaults
-                for arg, default in zip(f.args.args, defaults):
-                    annotation = None if arg.annotation is None else ExtractAnnotation().visit(arg.annotation)
-                    self.argtypes[arg.arg] = annotation
-                    self._args.append(Argument(arg.arg, annotation, default))
+                for arg in get_args(function_def_str):
+                    self.argtypes[arg.name] = arg.annotation
+                    self._args.append(arg)
             except SyntaxError as e:
                 FunctionSignature.n_invalid_signatures += 1
                 if FunctionSignature.signature_downgrade:
