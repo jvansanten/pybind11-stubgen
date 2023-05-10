@@ -107,11 +107,12 @@ def qualify_default_values(sig: "FunctionSignature") -> None:
     icecube._dataclasses.I3Position=icecube._dataclasses.I3Position(0,0,0)
     """
     for arg in sig._args:
-        if arg.default is not None and "." in arg.annotation:
-            parts = arg.annotation.split(".")
-            tail = parts.pop(-1)
-            head = ".".join(parts)
-            arg.default = ast.parse(ast.unparse(arg.default).replace(tail, f"{head}.{tail}")).body[0]
+        if arg.default is None:
+            continue
+        default_text = ast.unparse(arg.default)
+        if "." in arg.annotation and not default_text.startswith(arg.annotation):
+            klass = arg.get_class(sig.module_name)
+            arg.default = ast.parse(re.sub(f"^({re.escape(klass.__name__)})", f"{klass.__module__}.{klass.__qualname__}", default_text))
 
 def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
     if klass is None:
@@ -472,7 +473,7 @@ def replace_typing_types(match):
 
 def preprocess_docstring(doc):
     if doc is None:
-        return doc
+        return ""
     for hook in function_docstring_preprocessing_hooks:
         doc = hook(doc)
     return doc
