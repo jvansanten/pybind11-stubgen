@@ -95,7 +95,7 @@ def make_signature() -> pp.ParserElement:
         + parameters
         + pp.Suppress(")")
         + rettype.set_results_name("rettype")
-        + pp.Suppress(":")
+        + pp.Opt(pp.Suppress(":"))
     )
 
     return function_def
