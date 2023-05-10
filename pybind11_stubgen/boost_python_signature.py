@@ -21,10 +21,16 @@
 
 >>> sig = 'get( (I3CLSimFunctionMap)arg1, (icecube._icetray.OMKey)arg2 [, (object)default_val]) -> object :'
 >>> transform_signatures(sig)
-'1. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey, default_val: object) -> object:\\n2. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey, ) -> object:'
+'1. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey) -> object:\\n2. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey, default_val: object) -> object:'
 
 >>> transform_signatures("__init__( (object)arg1 [, (float)salinity=0.03844 [, (float)temperature=13.1 [, (float)pressure=1.517810339670313e+17 [, (float)n0=1.31405 [, (float)n1=1.45e-05 [, (float)n2=0.0001779 [, (float)n3=1.05e-06 [, (float)n4=1.6e-08 [, (float)n5=2.02e-06 [, (float)n6=15.868 [, (float)n7=0.01155 [, (float)n8=0.00423 [, (float)n9=4382.0 [, (float)n10=1145500.0]]]]]]]]]]]]]]) -> None :")
 '1. __init__(arg1: object, salinity: float=0.03844, temperature: float=13.1, pressure: float=1.517810339670313e+17, n0: float=1.31405, n1: float=1.45e-05, n2: float=0.0001779, n3: float=1.05e-06, n4: float=1.6e-08, n5: float=2.02e-06, n6: float=15.868, n7: float=0.01155, n8: float=0.00423, n9: float=4382.0, n10: float=1145500.0) -> None:'
+
+>>> transform_signatures("__init__( (object)arg1, (icecube._dataclasses.I3Geometry)arg2 [, (I3ScaleCalculator.IceCubeConfig)arg3 [, (I3ScaleCalculator.IceTopConfig)arg4 [, (icecube._dataclasses.ListInt)arg5 [, (icecube._dataclasses.ListInt)arg6 [, (int)arg7 [, (int)arg8]]]]]]) -> None:")
+'1. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry) -> None:\\n2. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig) -> None:\\n3. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig) -> None:\\n4. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt) -> None:\\n5. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt) -> None:\\n6. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt, arg7: int) -> None:\\n7. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt, arg7: int, arg8: int) -> None:'
+
+>>> transform_signatures("get( (AntennaSpectrumMap)arg1, (AntennaKey)arg2 [, (object)default_val]) -> object :")
+'1. get(arg1: AntennaSpectrumMap, arg2: AntennaKey) -> object:\\n2. get(arg1: AntennaSpectrumMap, arg2: AntennaKey, default_val: object) -> object:'
 """
 
 import pyparsing as pp
@@ -113,22 +119,20 @@ def expand_optional_args(tokens: pp.ParseResults):
     args = []
     while True:
         arg = tokens[0]
-        args.append(arg)
         default = arg.default.as_list()[0] if arg.default else None
         if default is None:
             yield args
-            args.clear()
+        args.append(arg)            
         if len(tokens) > 1:
             tokens = tokens[1]
         else:
+            yield args
             break
-    yield args
-
 
 def format_signature(tokens: pp.ParseResults):
     if tokens.optional_args:
         for num, args in enumerate(expand_optional_args(tokens.optional_args[0]), 1):
-            yield f"{num}. {tokens.name}({format_args(tokens.required_args)}, {format_args(args)}) -> {tokens.rettype[0]}:"
+            yield f"{num}. {tokens.name}({format_args(tokens.required_args)}{', ' if args else ''}{format_args(args)}) -> {tokens.rettype[0]}:"
     else:
         yield f"1. {tokens.name}({format_args(tokens.required_args)}) -> {tokens.rettype[0]}:"
 
@@ -145,4 +149,4 @@ def transform_signatures(doc: str):
         out += "\n"
         pos = end
     out += doc[pos:]
-    return out
+    return out.rstrip()
