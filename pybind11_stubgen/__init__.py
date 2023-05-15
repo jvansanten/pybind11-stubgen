@@ -112,7 +112,10 @@ def qualify_default_values(sig: "FunctionSignature") -> None:
         default_text = ast.unparse(arg.default)
         if "." in arg.annotation and not default_text.startswith(arg.annotation):
             klass = arg.get_class(sig.module_name)
-            arg.default = ast.parse(re.sub(f"^({re.escape(klass.__name__)})", f"{klass.__module__}.{klass.__qualname__}", default_text))
+            qualified = re.sub(f"^({re.escape(klass.__name__)})", f"{klass.__module__}.{klass.__qualname__}", default_text)
+            if qualified == default_text:
+                qualified = re.sub("^(icetray.I3Frame)(.*)", r"icecube._icetray.I3Frame\2", qualified)
+            arg.default = ast.parse(qualified)
 
 def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
     if klass is None:
