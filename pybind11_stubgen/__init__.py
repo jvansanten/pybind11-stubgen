@@ -61,7 +61,7 @@ function_docstring_preprocessing_hooks.append(transform_signatures)
 from functools import partial, reduce, cache
 
 # strip trailing colon from boost-python-generated signature 
-function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+).*$", flags=re.MULTILINE).sub, r"\1"))
+function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+):\s*?$", flags=re.MULTILINE).sub, r"\1"))
 
 def remove_shadowing_overloads(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
     """
