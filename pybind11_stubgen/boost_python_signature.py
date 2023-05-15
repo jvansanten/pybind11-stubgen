@@ -31,6 +31,9 @@
 
 >>> transform_signatures("get( (AntennaSpectrumMap)arg1, (AntennaKey)arg2 [, (object)default_val]) -> object :")
 '1. get(arg1: AntennaSpectrumMap, arg2: AntennaKey) -> object:\\n2. get(arg1: AntennaSpectrumMap, arg2: AntennaKey, default_val: object) -> object:'
+
+>>> transform_signatures("\\nvalues( (map_OMKey_int)arg1) -> list :\\n    D.values() -> list of D's values\\n    \\n\\n    C++ signature :\\n        boost::python::list values(std::__1::map<OMKey, int, std::__1::less<OMKey>, std::__1::allocator<std::__1::pair<OMKey const, int> > >)")
+"1. values(arg1: map_OMKey_int) -> list:\\n\\n    D.values() -> list of D's values\\n    \\n\\n    C++ signature :\\n        boost::python::list values(std::__1::map<OMKey, int, std::__1::less<OMKey>, std::__1::allocator<std::__1::pair<OMKey const, int> > >)"
 """
 
 import pyparsing as pp
@@ -87,15 +90,18 @@ def make_signature() -> pp.ParserElement:
         "required_args"
     ) + pp.Opt(optional_parameters, default=[]).set_results_name("optional_args")
 
-    rettype = pp.Opt(pp.Suppress("->") + qualname, default="Any")
+    rettype = pp.Suppress("->") + qualname
+
 
     function_def = (
-        name.set_results_name("name")
+        pp.LineStart()
+        + name.set_results_name("name")
         + pp.Suppress("(")
         + parameters
         + pp.Suppress(")")
         + rettype.set_results_name("rettype")
         + pp.Opt(pp.Suppress(":"))
+        + pp.LineEnd()
     )
 
     return function_def
@@ -145,8 +151,9 @@ def transform_signatures(doc: str):
     out = ""
     for tokens, start, end in FunctionDef.scan_string(doc):
         out += doc[pos:start]
-        out += "\n".join(format_signature(tokens))
         out += "\n"
+        out += "\n".join(format_signature(tokens))
+        out += "\n\n"
         pos = end
     out += doc[pos:]
-    return out.rstrip()
+    return out.strip()
