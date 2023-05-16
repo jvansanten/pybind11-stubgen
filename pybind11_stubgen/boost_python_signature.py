@@ -1,4 +1,4 @@
-"""
+r"""
 >>> sig = "__init__( (object)arg1 [, (int)photonsPerStep=200 [, (int)highPhotonsPerStep=0 [, (float)useHighPhotonsPerStepStartingFromNumPhotons=1000000000.0]]]) -> None :"
 >>> transform_signatures(sig)
 '1. __init__(arg1: object, photonsPerStep: int=200, highPhotonsPerStep: int=0, useHighPhotonsPerStepStartingFromNumPhotons: float=1000000000.0) -> None:'
@@ -21,19 +21,22 @@
 
 >>> sig = 'get( (I3CLSimFunctionMap)arg1, (icecube._icetray.OMKey)arg2 [, (object)default_val]) -> object :'
 >>> transform_signatures(sig)
-'1. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey) -> object:\\n2. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey, default_val: object) -> object:'
+'1. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey) -> object:\n2. get(arg1: I3CLSimFunctionMap, arg2: icecube._icetray.OMKey, default_val: object) -> object:'
 
 >>> transform_signatures("__init__( (object)arg1 [, (float)salinity=0.03844 [, (float)temperature=13.1 [, (float)pressure=1.517810339670313e+17 [, (float)n0=1.31405 [, (float)n1=1.45e-05 [, (float)n2=0.0001779 [, (float)n3=1.05e-06 [, (float)n4=1.6e-08 [, (float)n5=2.02e-06 [, (float)n6=15.868 [, (float)n7=0.01155 [, (float)n8=0.00423 [, (float)n9=4382.0 [, (float)n10=1145500.0]]]]]]]]]]]]]]) -> None :")
 '1. __init__(arg1: object, salinity: float=0.03844, temperature: float=13.1, pressure: float=1.517810339670313e+17, n0: float=1.31405, n1: float=1.45e-05, n2: float=0.0001779, n3: float=1.05e-06, n4: float=1.6e-08, n5: float=2.02e-06, n6: float=15.868, n7: float=0.01155, n8: float=0.00423, n9: float=4382.0, n10: float=1145500.0) -> None:'
 
 >>> transform_signatures("__init__( (object)arg1, (icecube._dataclasses.I3Geometry)arg2 [, (I3ScaleCalculator.IceCubeConfig)arg3 [, (I3ScaleCalculator.IceTopConfig)arg4 [, (icecube._dataclasses.ListInt)arg5 [, (icecube._dataclasses.ListInt)arg6 [, (int)arg7 [, (int)arg8]]]]]]) -> None:")
-'1. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry) -> None:\\n2. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig) -> None:\\n3. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig) -> None:\\n4. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt) -> None:\\n5. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt) -> None:\\n6. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt, arg7: int) -> None:\\n7. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt, arg7: int, arg8: int) -> None:'
+'1. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry) -> None:\n2. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig) -> None:\n3. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig) -> None:\n4. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt) -> None:\n5. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt) -> None:\n6. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt, arg7: int) -> None:\n7. __init__(arg1: object, arg2: icecube._dataclasses.I3Geometry, arg3: I3ScaleCalculator.IceCubeConfig, arg4: I3ScaleCalculator.IceTopConfig, arg5: icecube._dataclasses.ListInt, arg6: icecube._dataclasses.ListInt, arg7: int, arg8: int) -> None:'
 
 >>> transform_signatures("get( (AntennaSpectrumMap)arg1, (AntennaKey)arg2 [, (object)default_val]) -> object :")
-'1. get(arg1: AntennaSpectrumMap, arg2: AntennaKey) -> object:\\n2. get(arg1: AntennaSpectrumMap, arg2: AntennaKey, default_val: object) -> object:'
+'1. get(arg1: AntennaSpectrumMap, arg2: AntennaKey) -> object:\n2. get(arg1: AntennaSpectrumMap, arg2: AntennaKey, default_val: object) -> object:'
 
->>> transform_signatures("\\nvalues( (map_OMKey_int)arg1) -> list :\\n    D.values() -> list of D's values\\n    \\n\\n    C++ signature :\\n        boost::python::list values(std::__1::map<OMKey, int, std::__1::less<OMKey>, std::__1::allocator<std::__1::pair<OMKey const, int> > >)")
-"1. values(arg1: map_OMKey_int) -> list:\\n\\n    D.values() -> list of D's values\\n    \\n\\n    C++ signature :\\n        boost::python::list values(std::__1::map<OMKey, int, std::__1::less<OMKey>, std::__1::allocator<std::__1::pair<OMKey const, int> > >)"
+>>> transform_signatures("\nvalues( (map_OMKey_int)arg1) -> list :\n    D.values() -> list of D's values\n    \n\n    C++ signature :\n        boost::python::list values(std::__1::map<OMKey, int, std::__1::less<OMKey>, std::__1::allocator<std::__1::pair<OMKey const, int> > >)")
+"1. values(arg1: map_OMKey_int) -> list:\n\n    D.values() -> list of D's values\n    \n\n    C++ signature :\n        boost::python::list values(std::__1::map<OMKey, int, std::__1::less<OMKey>, std::__1::allocator<std::__1::pair<OMKey const, int> > >)"
+
+>>> transform_signatures('\n__init__( (object)arg1) -> None\n\n__init__( (object)arg1, (I3STConfiguration)arg2) -> None\n\n__init__( (object)self, (str)name, (I3VectorOMKeyLinkSet)omKeyLinkSets) -> None :\n    Constructs a new I3STConfiguration object with the given name and given  \n    list of OMKeyLinkSet objects.')
+'1. __init__(arg1: object) -> None:\n\n1. __init__(arg1: object, arg2: I3STConfiguration) -> None:\n\n1. __init__(self: object, name: str, omKeyLinkSets: I3VectorOMKeyLinkSet) -> None:\n\n    Constructs a new I3STConfiguration object with the given name and given  \n    list of OMKeyLinkSet objects.'
 """
 
 import pyparsing as pp
@@ -90,18 +93,16 @@ def make_signature() -> pp.ParserElement:
         "required_args"
     ) + pp.Opt(optional_parameters, default=[]).set_results_name("optional_args")
 
-    rettype = pp.Suppress("->") + qualname
+    rettype = pp.Suppress("->") + qualname + pp.Suppress(pp.Opt(":"))
 
 
     function_def = (
-        pp.LineStart()
+        pp.Suppress(pp.LineStart())
         + name.set_results_name("name")
         + pp.Suppress("(")
         + parameters
         + pp.Suppress(")")
         + rettype.set_results_name("rettype")
-        + pp.Opt(pp.Suppress(":"))
-        + pp.LineEnd()
     )
 
     return function_def
@@ -153,7 +154,7 @@ def transform_signatures(doc: str):
         out += doc[pos:start]
         out += "\n"
         out += "\n".join(format_signature(tokens))
-        out += "\n\n"
+        out += "\n"
         pos = end
     out += doc[pos:]
     return out.strip()
