@@ -1389,6 +1389,9 @@ def main(args=None):
         help="Render `numpy.ndarray` without (non-standardized) bracket-enclosed type and shape info",
     )
     parser.add_argument(
+        "-i", "--import-modules", action="append", default=[], metavar="PREIMPORT_MODULES", help="modules to import (but not generate stubs for)"
+    )
+    parser.add_argument(
         "module_names", nargs="+", metavar="MODULE_NAME", type=str, help="modules names"
     )
     parser.add_argument("--log-level", default="INFO", help="Set output log level")
@@ -1433,6 +1436,9 @@ def main(args=None):
         format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
         handlers=handlers,
     )
+
+    for _module_name in sys_args.import_modules:
+        importlib.import_module(_module_name)
 
     with DirectoryWalkerGuard(sys_args.output_dir):
         for _module_name in sys_args.module_names:
