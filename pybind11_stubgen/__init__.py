@@ -886,10 +886,10 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
                     comment = set()
             
             result.append(
-                "def {sig} {ellipsis} {comment}".format(
+                "def {sig}{ellipsis}{comment}".format(
                     sig=sig,
-                    ellipsis="" if docstring else "...",
-                    comment=f"# type: ignore[{','.join(comment)}]" if comment else ""
+                    ellipsis="" if docstring else " ...",
+                    comment=f" # type: ignore[{','.join(comment)}]" if comment else ""
                 )
             )
             if docstring:
