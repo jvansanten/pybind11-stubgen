@@ -512,13 +512,25 @@ class StubsGenerator(object):
         return "\n".join(lines)
 
     @staticmethod
-    def is_valid_module(module_name):  # type: (str) -> bool
-        import importlib.util
+    def module_from_qualname(qualname):  # type: (str) -> Optional[str]
+        """Extract a module name from a fully-qualified name"""
+        module_parts = qualname.split(".")
+        name_parts = []
+        while len(module_parts) > 1:
+            name_parts.insert(0, module_parts.pop())
+            try:
+                module_name = ".".join(module_parts)
+                root = importlib.import_module(module_name)
+                try:
+                    for k in name_parts:
+                        root = getattr(root, k)
+                    return module_name
+                except AttributeError:
+                    continue
+            except ModuleNotFoundError:
+                continue
 
-        try:
-            return importlib.import_module(module_name) is not None
-        except ModuleNotFoundError:
-            return False
+        return None
 
     @staticmethod
     def fully_qualified_name(klass):
@@ -798,12 +810,9 @@ class FreeFunctionStubsGenerator(StubsGenerator):
         involved_modules_names = set()
         for s in self.signatures:  # type: FunctionSignature
             for t in s.get_all_involved_types():  # type: str
-                try:
-                    module_name = t[: t.rindex(".")]
-                    if self.is_valid_module(module_name):
-                        involved_modules_names.add(module_name)
-                except ValueError:
-                    pass
+                module_name = self.module_from_qualname(t)
+                if module_name:
+                    involved_modules_names.add(module_name)
         return involved_modules_names
 
 DUNDER_METHODS = {
