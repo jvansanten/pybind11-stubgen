@@ -990,6 +990,10 @@ class ClassStubsGenerator(StubsGenerator):
     def get_involved_modules_names(self):
         return self.involved_modules_names
 
+    @cache
+    def get_involved_arg_type_names(self):
+        return {t for f in self.methods for sig in f.signatures for t in sig.argtypes.values()}
+
     def parse(self):
         if self.klass in _visited_objects:
             return
@@ -1214,13 +1218,14 @@ class ModuleStubsGenerator(StubsGenerator):
         ):  # type: (ClassStubsGenerator, ClassStubsGenerator) -> int
             if a.klass is b.klass:
                 return 0
-            if issubclass(a.klass, b.klass):
+            if issubclass(a.klass, b.klass) or b.klass.__name__ in a.get_involved_arg_type_names():
                 return -1
-            if issubclass(b.klass, a.klass):
+            if issubclass(b.klass, a.klass) or a.klass.__name__ in b.get_involved_arg_type_names():
                 return 1
             return 0
 
         # reorder classes so base classes would be printed before derived
+        # and argument types are defined before they are used
         # print([ k.klass.__name__ for k in self.classes ])
         for i in range(len(self.classes)):
             for j in range(i + 1, len(self.classes)):
