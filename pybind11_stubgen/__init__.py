@@ -722,7 +722,7 @@ class AttributeStubsGenerator(StubsGenerator):
         # special case for boost-python enums
         attr_type = type(self.attr)
         if is_boost_python_enum(attr_type):
-            return ["{name} = {klass}({repr})".format(name=self.name, klass=attr_type.__qualname__, repr=repr(int(self.attr)))]
+            return ["{name} = {klass}({repr})".format(name=self.name, klass=self.fully_qualified_name(attr_type), repr=repr(int(self.attr)))]
 
         if self.is_safe_to_use_repr(self.attr):
             return ["{name} = {repr}".format(name=self.name, repr=repr(self.attr))]
