@@ -435,6 +435,8 @@ class PropertySignature(object):
     def __repr__(self):
         return f"PropertySignature(rtype={self.rtype}, setter_args={self.setter_args}, access_type={self.access_type}"
 
+    def get_all_involved_types(self):
+        return [self.setter_arg_type, self.rtype]
 
 # If true numpy.ndarray[int32[3,3]] will be reduced to numpy.ndarray
 BARE_NUPMY_NDARRAY = False
@@ -947,6 +949,14 @@ class PropertyStubsGenerator(StubsGenerator):
                 result.append(self.indent("pass"))
 
         return result
+    
+    def get_involved_modules_names(self):  # type: () -> Set[str]
+        involved_modules_names = set()
+        for t in self.signature.get_all_involved_types():  # type: str
+            module_name = self.module_from_qualname(t)
+            if module_name:
+                involved_modules_names.add(module_name)
+        return involved_modules_names
 
 
 class ClassStubsGenerator(StubsGenerator):
@@ -1075,6 +1085,9 @@ class ClassStubsGenerator(StubsGenerator):
 
         for f in self.methods:  # type: ClassMemberStubsGenerator
             self.involved_modules_names |= f.get_involved_modules_names()
+        
+        for prop in self.properties:
+            self.involved_modules_names |= prop.get_involved_modules_names()
 
         for attr in self.fields:
             self.involved_modules_names |= attr.get_involved_modules_names()
