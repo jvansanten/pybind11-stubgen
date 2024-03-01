@@ -1,5 +1,6 @@
 import ast
 import builtins
+import copy
 import dataclasses
 import importlib
 import inspect
@@ -11,7 +12,9 @@ import sys
 from types import ModuleType
 import warnings
 from argparse import ArgumentParser
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Set, Sequence, Mapping, Type, Union
+import typing
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Set, Type, Union
+from collections.abc import Sequence, Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -1091,6 +1094,34 @@ class ClassStubsGenerator(StubsGenerator):
 
         for attr in self.fields:
             self.involved_modules_names |= attr.get_involved_modules_names()
+
+        if equivalent:
+            if typing.get_origin(equivalent) is Sequence:
+                value_type = typing.get_args(equivalent)[0]
+                class_type_name = f"{self.klass.__module__}.{self.klass.__qualname__}"
+                value_type_name = f"{value_type.__module__}.{value_type.__qualname__}"
+                for f in self.methods:
+                    if f.name == "__iter__":
+                        f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
+                    if f.name == "__setitem__":
+                        f.signatures[0]._args[1].annotation = "int"
+                        f.signatures[0]._args[2].annotation = value_type_name
+                    if f.name == "__getitem__":
+                        f.signatures[0]._args[1].annotation = "int"
+                        f.signatures[0].rtype = value_type_name
+                        # add a slice overload, why not
+                        if len(f.signatures) == 1:
+                            sig = copy.deepcopy(f.signatures[0])
+                            sig.rtype = class_type_name
+                            sig._args[1].annotation = "slice"
+                            f.signatures.append(sig)
+                    if f.name == "__delitem__":
+                        f.signatures[0]._args[1].annotation = "int"
+                    if f.name == "append":
+                        f.signatures[0]._args[1].annotation = value_type_name
+                    if f.name == "extend":
+                        f.signatures[0]._args[1].annotation = f"typing.Iterable[{value_type_name}]"
+
 
     def to_lines(self):  # type: () -> List[str]
         def strip_current_module_name(obj, module_name):
