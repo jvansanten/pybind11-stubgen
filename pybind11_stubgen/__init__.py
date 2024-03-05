@@ -1381,11 +1381,12 @@ class ModuleStubsGenerator(StubsGenerator):
         all_ = set(member for member in globals_.keys() if member.isidentifier()) - {
             "__builtins__"
         }
-        result.append(
-            "__all__ = [\n    "
-            + ",\n    ".join(map(lambda s: '"%s"' % s, sorted(all_)))
-            + "\n]\n\n"
-        )
+        if all_:
+            result.append(
+                "__all__ = [\n    "
+                + ",\n    ".join(map(lambda s: '"%s"' % s, sorted(all_)))
+                + "\n]\n\n"
+            )
 
         for x in itertools.chain(self.classes, self.free_functions, self.attributes,
                                  self.alias):
