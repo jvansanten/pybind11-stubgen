@@ -132,10 +132,13 @@ def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
 
 def get_container_equivalent(klass: Type):
     """Replace container an annotation that covers the types implicitly convertible to that container"""
+    if klass in _container_equivalents:
+        print(_container_equivalents[klass])
+        return _container_equivalents[klass]
     if hasattr(klass, "__key_type__"):
         # std::map
         return Mapping[_type_or_union(klass.__key_type__()), _type_or_union(klass.__value_type__())]
-    elif hasattr(klass, "__value_type__") and not (hasattr(klass, "pre_order_iterator") or hasattr(klass, "pre_order_iter")):
+    if hasattr(klass, "__value_type__") and not (hasattr(klass, "pre_order_iterator") or hasattr(klass, "pre_order_iter")):
         # std::vector, but none of the various trees
         return Sequence[_type_or_union(klass.__value_type__())]
 
@@ -855,7 +858,12 @@ for op in "eq", "ne":
 # these still return lists, py2 style
 for f in "keys", "values", "items":
     IGNORE_COMMENTS[f] = {"override"}
+# getitem may be missing SupportsIndex, slice overrides
+# iter may return pairs instead of keys for maps
+for f in "__getitem__", "__iter__":
+    IGNORE_COMMENTS[f] = {"override"}
 
+_container_equivalents: dict[type,type] = {}
 
 
 class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
@@ -1096,10 +1104,9 @@ class ClassStubsGenerator(StubsGenerator):
             self.involved_modules_names |= attr.get_involved_modules_names()
 
         if equivalent:
+            class_type_name = self.fully_qualified_name(self.klass)
             if typing.get_origin(equivalent) is Sequence:
-                value_type = typing.get_args(equivalent)[0]
-                class_type_name = f"{self.klass.__module__}.{self.klass.__qualname__}"
-                value_type_name = f"{value_type.__module__}.{value_type.__qualname__}"
+                key_type_name, value_type_name = "int", self.fully_qualified_name(typing.get_args(equivalent)[0])
                 for f in self.methods:
                     if f.name == "__iter__":
                         f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
@@ -1121,7 +1128,30 @@ class ClassStubsGenerator(StubsGenerator):
                         f.signatures[0]._args[1].annotation = value_type_name
                     if f.name == "extend":
                         f.signatures[0]._args[1].annotation = f"typing.Iterable[{value_type_name}]"
-
+            if typing.get_origin(equivalent) is Mapping:
+                _container_equivalents[self.klass.__item_type__()] = tuple[_type_or_union(self.klass.__key_type__()), _type_or_union(self.klass.__value_type__())]
+                key_type_name, value_type_name = (self.fully_qualified_name(n) for n in typing.get_args(equivalent))
+                item_type_name = self.fully_qualified_name(self.klass.__item_type__())
+                for f in self.methods:
+                    if f.name == "__setitem__":
+                        f.signatures[0]._args[1].annotation = key_type_name
+                        f.signatures[0]._args[2].annotation = value_type_name
+                    if f.name == "__getitem__":
+                        f.signatures[0]._args[1].annotation = key_type_name
+                        f.signatures[0].rtype = value_type_name
+                    if f.name == "__delitem__":
+                        f.signatures[0]._args[1].annotation = key_type_name
+                    if f.name == "__iter__":
+                        f.signatures[0].rtype = f"typing.Iterator[{item_type_name}]"
+                    if f.name == "itervalues":
+                        f.signatures[0]._args[0].name = "self"
+                        f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
+                    if f.name == "iterkeys":
+                        f.signatures[0]._args[0].name = "self"
+                        f.signatures[0].rtype = f"typing.Iterator[{key_type_name}]"
+                    if f.name in ("pop", "get"):
+                        f.signatures[0].rtype = value_type_name
+                    
 
     def to_lines(self):  # type: () -> List[str]
         def strip_current_module_name(obj, module_name):
