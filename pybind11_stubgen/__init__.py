@@ -133,7 +133,6 @@ def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
 def get_container_equivalent(klass: Type):
     """Replace container an annotation that covers the types implicitly convertible to that container"""
     if klass in _container_equivalents:
-        print(_container_equivalents[klass])
         return _container_equivalents[klass]
     if hasattr(klass, "__key_type__"):
         # std::map
