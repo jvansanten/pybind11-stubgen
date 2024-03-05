@@ -1128,10 +1128,16 @@ class ClassStubsGenerator(StubsGenerator):
             regex = r"{}\.(\w+)".format(module_name.replace(".", r"\."))
             return re.sub(regex, r"\g<1>", obj)
 
+        def type_args(obj, module_name):
+            args = typing.get_args(obj)
+            if args:
+                return f'[{",".join(strip_current_module_name(self.fully_qualified_name(arg), module_name) for arg in args)}]'
+            return ''
+
         base_classes_list = [
             strip_current_module_name(
                 self.fully_qualified_name(b), self.klass.__module__
-            )
+            ) + type_args(b, self.klass.__module__)
             for b in self.base_classes
         ]
         result = [
