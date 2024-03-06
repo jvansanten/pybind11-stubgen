@@ -589,11 +589,11 @@ class StubsGenerator(object):
         module_name = klass.__module__ if hasattr(klass, "__module__") else None
         class_name = getattr(klass, "__qualname__", klass.__name__)
 
-        if module_name == "builtins":
-            return class_name
-        elif typing.get_args(klass):
+        if typing.get_args(klass):
             # include type args (e.g. Sequence[int])
             return repr(klass)
+        if module_name == "builtins":
+            return class_name
         else:
             return "{module}.{klass}".format(module=module_name, klass=class_name)
 
