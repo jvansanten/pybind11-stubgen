@@ -177,12 +177,39 @@ def treat_object_as_any(sig: "FunctionSignature") -> None:
     if sig.rtype == "object":
         sig.rtype = "typing.Any"
 
+def fixup_object_protocol(sig: "FunctionSignature") -> None:
+    # objects must compare to any other type
+    if sig.name in {"__eq__", "__ne__"}:
+        sig._args[1].annotation = "typing.Any"
+
+def fixup_default_repr(sig: "FunctionSignature") -> None:
+    for arg in sig._args:
+        if not arg.default:
+            continue
+        if isinstance(arg.default, ast.List):
+            arg.default = ast.Call(
+                ast.parse(arg.annotation).body[0].value,
+                [arg.default] if arg.default.elts else [],
+                {}
+            )
+        if (
+            isinstance(arg.default, ast.Call)
+            and isinstance(arg.default.func, ast.Name)
+            and arg.default.func.id == "make_pair"
+        ):
+            # transform e.g. cosAziRange: icecube._dataclasses.PairDoubleDouble=make_pair(-1, 1)
+            #             to cosAziRange: icecube._dataclasses.PairDoubleDouble=icecube._dataclasses.make_pair(-1, 1)
+            arg.default.func = ast.Attribute(ast.parse(arg.annotation).body[0].value.value, arg.default.func.id)
+
 function_overload_filters.append(remove_shadowing_overloads)
 
 function_signature_postprocessing_hooks.append(replace_object_protocol_rtypes)
 function_signature_postprocessing_hooks.append(qualify_default_values)
 function_signature_postprocessing_hooks.append(replace_container_types)
 function_signature_postprocessing_hooks.append(treat_object_as_any)
+function_signature_postprocessing_hooks.append(fixup_object_protocol)
+function_signature_postprocessing_hooks.append(fixup_default_repr)
+
 
 def _find_str_end(s, start):
     for i in range(start + 1, len(s)):
