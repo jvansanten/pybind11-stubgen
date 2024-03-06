@@ -421,12 +421,12 @@ class FunctionSignature(object):
     def __eq__(self, other):
         return isinstance(other, FunctionSignature) and (
             self.name,
-            self.args,
+            self._args,
             self.rtype,
-        ) == (other.name, other.args, other.rtype)
+        ) == (other.name, other._args, other.rtype)
 
     def __hash__(self):
-        return hash((self.name, self.args, self.rtype))
+        return hash((self.name, ((arg.name, arg.annotation, arg.default) for arg in self._args), self.rtype))
 
     def __repr__(self):
         return f"FunctionSignature({self.name}, args={self.args}, rtype={self.rtype})"
