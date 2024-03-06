@@ -187,11 +187,13 @@ def fixup_default_repr(sig: "FunctionSignature") -> None:
         if not arg.default:
             continue
         if isinstance(arg.default, ast.List):
-            arg.default = ast.Call(
-                ast.parse(arg.annotation).body[0].value,
-                [arg.default] if arg.default.elts else [],
-                {}
-            )
+            annotation = ast.parse(arg.annotation).body[0].value
+            if not isinstance(annotation, ast.Subscript): # avoid subscripted generics
+                arg.default = ast.Call(
+                    annotation,
+                    [arg.default] if arg.default.elts else [],
+                    {}
+                )
         if (
             isinstance(arg.default, ast.Call)
             and isinstance(arg.default.func, ast.Name)
