@@ -407,13 +407,13 @@ class FunctionSignature(object):
 
     def get_all_involved_types(self):
         types = []
-        for t in [self.rtype] + self.split_arguments():
+        for t in [self.rtype, *(arg.annotation for arg in self._args if arg.annotation)]:
             types.extend(
                 [
                     m[0]
                     for m in re.findall(
                         r"([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*)",
-                        self.argument_type(t),
+                        t,
                     )
                 ]
             )
