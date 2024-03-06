@@ -141,6 +141,24 @@ def get_container_equivalent(klass: Type):
         # std::vector, but none of the various trees
         return Sequence[_type_or_union(klass.__value_type__())]
 
+def strip_current_module_name(obj, module_name):
+    regex = r"{}\.(\w+)".format(module_name.replace(".", r"\."))
+    return re.sub(regex, r"\g<1>", obj)
+
+def type_args(obj, module_name):
+    args = typing.get_args(obj)
+    if args:
+        return f'[{",".join(strip_current_module_name(StubsGenerator.fully_qualified_name(arg), module_name) for arg in args)}]'
+    return ''
+
+def fully_qualified_type_string(obj, current_module_name):
+    return (
+        strip_current_module_name(
+            StubsGenerator.fully_qualified_name(
+                Union[obj] if isinstance(obj, tuple) else obj
+            ),
+        current_module_name)
+    )
 
 def replace_container_types(sig: "FunctionSignature") -> None:
     for arg in sig._args[1:]:
@@ -546,7 +564,7 @@ class StubsGenerator(object):
 
         if module_name == "builtins":
             return class_name
-        elif module_name == "typing":
+        elif typing.get_args(klass):
             # include type args (e.g. Sequence[int])
             return repr(klass)
         else:
@@ -1156,20 +1174,10 @@ class ClassStubsGenerator(StubsGenerator):
                     
 
     def to_lines(self):  # type: () -> List[str]
-        def strip_current_module_name(obj, module_name):
-            regex = r"{}\.(\w+)".format(module_name.replace(".", r"\."))
-            return re.sub(regex, r"\g<1>", obj)
-
-        def type_args(obj, module_name):
-            args = typing.get_args(obj)
-            if args:
-                return f'[{",".join(strip_current_module_name(self.fully_qualified_name(arg), module_name) for arg in args)}]'
-            return ''
-
         base_classes_list = [
             strip_current_module_name(
                 self.fully_qualified_name(b), self.klass.__module__
-            ) + type_args(b, self.klass.__module__)
+            )
             for b in self.base_classes
         ]
         result = [
