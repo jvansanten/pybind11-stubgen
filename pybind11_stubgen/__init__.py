@@ -1093,8 +1093,11 @@ class ClassStubsGenerator(StubsGenerator):
                 self.base_classes.append(B)
                 self.involved_modules_names.add(B.__module__)
 
-        for f in self.methods:  # type: ClassMemberStubsGenerator
+        for f in self.methods:
             self.involved_modules_names |= f.get_involved_modules_names()
+        
+        for c in self.classes:
+            self.involved_modules_names |= c.get_involved_modules_names()
         
         for prop in self.properties:
             self.involved_modules_names |= prop.get_involved_modules_names()
