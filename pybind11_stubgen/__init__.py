@@ -175,6 +175,16 @@ def replace_container_types(sig: "FunctionSignature") -> None:
         if equivalent := get_container_equivalent(arg.get_class(sig.module_name)):
             arg.annotation = repr(equivalent)
 
+def implicit_conversions_as_unions(sig: "FunctionSignature") -> None:
+    # wouldn't it be nice if boost-python emitted these in docstrings?
+    implicit = {"I3ParticleID": ["I3Particle"]}
+    for arg in sig._args[1:]:
+        for target, sources in implicit.items():
+            if arg.annotation == target:
+                print(arg.annotation)
+                arg.annotation = f"typing.Union[{', '.join((target, *sources))}]"
+                print(arg.annotation)
+
 def replace_object_protocol_rtypes(sig: "FunctionSignature") -> None:
     sig.rtype = OBJECT_PROTOCOL_RETURN_TYPES.get(sig.name, sig.rtype)
 
@@ -213,6 +223,7 @@ def fixup_default_repr(sig: "FunctionSignature") -> None:
 
 function_overload_filters.append(remove_shadowing_overloads)
 
+function_signature_postprocessing_hooks.append(implicit_conversions_as_unions)
 function_signature_postprocessing_hooks.append(replace_object_protocol_rtypes)
 function_signature_postprocessing_hooks.append(qualify_default_values)
 function_signature_postprocessing_hooks.append(replace_container_types)
