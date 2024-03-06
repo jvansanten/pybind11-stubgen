@@ -130,15 +130,23 @@ def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
     else:
         return klass
 
-def get_container_equivalent(klass: Type):
+def _is_std_map_indexing_suite(klass: Type) -> bool:
+    # std::map
+    return hasattr(klass, "__key_type__")
+
+def _is_std_list_indexing_suite(klass: Type) -> bool:
+    # std::vector, but none of the various trees
+    if _is_std_map_indexing_suite(klass):
+        return False
+    return hasattr(klass, "__value_type__") and not (hasattr(klass, "pre_order_iterator") or hasattr(klass, "pre_order_iter"))
+
+def get_container_equivalent(klass: Type, strict=True):
     """Replace container an annotation that covers the types implicitly convertible to that container"""
     if klass in _container_equivalents:
         return _container_equivalents[klass]
-    if hasattr(klass, "__key_type__"):
-        # std::map
+    if not strict and _is_std_map_indexing_suite(klass):
         return Mapping[_type_or_union(klass.__key_type__()), _type_or_union(klass.__value_type__())]
-    if hasattr(klass, "__value_type__") and not (hasattr(klass, "pre_order_iterator") or hasattr(klass, "pre_order_iter")):
-        # std::vector, but none of the various trees
+    if _is_std_list_indexing_suite(klass):
         return Sequence[_type_or_union(klass.__value_type__())]
 
 def strip_current_module_name(obj, module_name):
@@ -898,15 +906,11 @@ IGNORE_COMMENTS = {}
 # iadd may be inconsistent with add (if add lacks some overrides)
 for op in "add", "sub", "mul", "div":
     IGNORE_COMMENTS[f"__i{op}__"] = {"misc"}
-# eq/ne may only be implemented for the specific type
-for op in "eq", "ne":
-    IGNORE_COMMENTS[f"__{op}__"] = {"override"}
 # these still return lists, py2 style
-for f in "keys", "values", "items":
-    IGNORE_COMMENTS[f] = {"override"}
+# for f in "keys", "values", "items":
+#     IGNORE_COMMENTS[f] = {"override"}
 # getitem may be missing SupportsIndex, slice overrides
-# iter may return pairs instead of keys for maps
-for f in "__getitem__", "__iter__":
+for f in ("__getitem__",):
     IGNORE_COMMENTS[f] = {"override"}
 
 _container_equivalents: dict[type,type] = {}
@@ -1132,6 +1136,93 @@ class ClassStubsGenerator(StubsGenerator):
                                  self.alias):
             x.parse()
 
+        # fix up the signatures of container methods
+        if _is_std_list_indexing_suite(self.klass):
+            class_type_name = self.fully_qualified_name(self.klass)
+            key_type_name, value_type_name = "int", self.fully_qualified_name(self.klass.__value_type__())
+            for f in self.methods:
+                if f.name == "__iter__":
+                    f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
+                if f.name == "__setitem__":
+                    f.signatures[0]._args[1].annotation = "int"
+                    f.signatures[0]._args[2].annotation = value_type_name
+                if f.name == "__getitem__":
+                    f.signatures[0]._args[1].annotation = "int"
+                    f.signatures[0].rtype = value_type_name
+                    # add a slice overload, why not
+                    if len(f.signatures) == 1:
+                        sig = copy.deepcopy(f.signatures[0])
+                        sig.rtype = class_type_name
+                        sig._args[1].annotation = "slice"
+                        f.signatures.append(sig)
+                if f.name == "__delitem__":
+                    f.signatures[0]._args[1].annotation = "int"
+                if f.name == "append":
+                    f.signatures[0]._args[1].annotation = value_type_name
+                if f.name == "extend":
+                    f.signatures[0]._args[1].annotation = f"typing.Iterable[{value_type_name}]"
+        
+        if _is_std_map_indexing_suite(self.klass):
+            _container_equivalents[self.klass.__item_type__()] = tuple[_type_or_union(self.klass.__key_type__()), _type_or_union(self.klass.__value_type__())]
+            class_type_name = fully_qualified_type_string(self.klass, self.klass.__module__)
+            key_type_name, value_type_name = (
+                fully_qualified_type_string(n, self.klass.__module__)
+                for n in (self.klass.__key_type__(), self.klass.__value_type__() or typing.Any)
+            )
+            key_equiv_name, value_equiv_name = (
+                fully_qualified_type_string(_type_or_union(n), self.klass.__module__)
+                for n in (self.klass.__key_type__(), self.klass.__value_type__() or typing.Any)
+            )
+            item_type_name = fully_qualified_type_string(self.klass.__item_type__(), self.klass.__module__)
+            for f in self.methods:
+                if f.name == "__init__":
+                    for s in f.signatures:
+                        # mark dict and sequence constructors
+                        if len(s._args) > 1:
+                            if s._args[1].annotation == "dict":
+                                s._args[1].annotation = f"collections.abc.Mapping[{key_equiv_name},{value_equiv_name}]"
+                            if s._args[1].annotation == "list":
+                                s._args[1].annotation = f"collections.abc.Sequence[tuple[{key_equiv_name},{value_equiv_name}]]"
+                if f.name == "__setitem__":
+                    f.signatures[0]._args[1].annotation = key_equiv_name
+                    f.signatures[0]._args[2].annotation = value_equiv_name
+                if f.name == "__getitem__":
+                    f.signatures[0]._args[1].annotation = key_equiv_name
+                    f.signatures[0].rtype = value_type_name
+                if f.name == "__delitem__":
+                    f.signatures[0]._args[1].annotation = key_equiv_name
+                if f.name == "__iter__":
+                    f.signatures[0].rtype = f"typing.Iterator[{item_type_name}]"
+                if f.name == "itervalues":
+                    f.signatures[0]._args[0].name = "self"
+                    f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
+                if f.name == "iterkeys":
+                    f.signatures[0]._args[0].name = "self"
+                    f.signatures[0].rtype = f"typing.Iterator[{key_type_name}]"
+                if f.name == "iteritems":
+                    f.signatures[0]._args[0].name = "self"
+                    f.signatures[0].rtype = f"typing.Iterator[{item_type_name}]"
+                if f.name in ("pop", "get"):
+                    f.signatures[0].rtype = value_type_name
+                    # with default value, return may be default
+                    f.signatures[1]._args[2].annotation = "T"
+                    f.signatures[1].rtype = f"typing.Union[T, {value_type_name}]"
+                if f.name == "popitem":
+                    f.signatures[0].rtype = f"tuple[{key_type_name},{value_type_name}]"
+                if f.name == "update":
+                    f.signatures[0]._args[0].name = "self"
+                    f.signatures[0]._args[1].annotation = f"collections.abc.Mapping[{key_equiv_name},{value_equiv_name}]"
+                if f.name == "fromkeys":
+                    f.signatures[0]._args[0].annotation = f"collections.abc.Sequence[{key_equiv_name}]"
+                    f.signatures[0]._args[1].annotation = value_equiv_name
+                    f.signatures[0].rtype = class_type_name
+                if f.name == "keys":
+                    f.signatures[0].rtype = f"collections.abc.Sequence[{key_type_name}]"
+                if f.name == "values":
+                    f.signatures[0].rtype = f"collections.abc.Sequence[{value_type_name}]"
+                if f.name == "items":
+                    f.signatures[0].rtype = f"collections.abc.Sequence[{item_type_name}]"
+
         for B in bases:
             if (
                 B.__name__ != self.klass.__name__
@@ -1150,63 +1241,11 @@ class ClassStubsGenerator(StubsGenerator):
             self.involved_modules_names |= prop.get_involved_modules_names()
 
         for attr in self.fields:
-            self.involved_modules_names |= attr.get_involved_modules_names()
-
-        if equivalent:
-            class_type_name = self.fully_qualified_name(self.klass)
-            if typing.get_origin(equivalent) is Sequence:
-                key_type_name, value_type_name = "int", self.fully_qualified_name(typing.get_args(equivalent)[0])
-                for f in self.methods:
-                    if f.name == "__iter__":
-                        f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
-                    if f.name == "__setitem__":
-                        f.signatures[0]._args[1].annotation = "int"
-                        f.signatures[0]._args[2].annotation = value_type_name
-                    if f.name == "__getitem__":
-                        f.signatures[0]._args[1].annotation = "int"
-                        f.signatures[0].rtype = value_type_name
-                        # add a slice overload, why not
-                        if len(f.signatures) == 1:
-                            sig = copy.deepcopy(f.signatures[0])
-                            sig.rtype = class_type_name
-                            sig._args[1].annotation = "slice"
-                            f.signatures.append(sig)
-                    if f.name == "__delitem__":
-                        f.signatures[0]._args[1].annotation = "int"
-                    if f.name == "append":
-                        f.signatures[0]._args[1].annotation = value_type_name
-                    if f.name == "extend":
-                        f.signatures[0]._args[1].annotation = f"typing.Iterable[{value_type_name}]"
-            if typing.get_origin(equivalent) is Mapping:
-                _container_equivalents[self.klass.__item_type__()] = tuple[_type_or_union(self.klass.__key_type__()), _type_or_union(self.klass.__value_type__())]
-                key_type_name, value_type_name = (self.fully_qualified_name(n) for n in typing.get_args(equivalent))
-                item_type_name = self.fully_qualified_name(self.klass.__item_type__())
-                for f in self.methods:
-                    if f.name == "__setitem__":
-                        f.signatures[0]._args[1].annotation = key_type_name
-                        f.signatures[0]._args[2].annotation = value_type_name
-                    if f.name == "__getitem__":
-                        f.signatures[0]._args[1].annotation = key_type_name
-                        f.signatures[0].rtype = value_type_name
-                    if f.name == "__delitem__":
-                        f.signatures[0]._args[1].annotation = key_type_name
-                    if f.name == "__iter__":
-                        f.signatures[0].rtype = f"typing.Iterator[{item_type_name}]"
-                    if f.name == "itervalues":
-                        f.signatures[0]._args[0].name = "self"
-                        f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
-                    if f.name == "iterkeys":
-                        f.signatures[0]._args[0].name = "self"
-                        f.signatures[0].rtype = f"typing.Iterator[{key_type_name}]"
-                    if f.name in ("pop", "get"):
-                        f.signatures[0].rtype = value_type_name
-                    
+            self.involved_modules_names |= attr.get_involved_modules_names()         
 
     def to_lines(self):  # type: () -> List[str]
         base_classes_list = [
-            strip_current_module_name(
-                self.fully_qualified_name(b), self.klass.__module__
-            )
+            fully_qualified_type_string(b, self.klass.__module__)
             for b in self.base_classes
         ]
         result = [
@@ -1411,6 +1450,9 @@ class ModuleStubsGenerator(StubsGenerator):
 
         if "numpy" in used_modules and not BARE_NUPMY_NDARRAY:
             result += ["_Shape = typing.Tuple[int, ...]"]
+
+        # add a single typevar to use
+        result += ['T = typing.TypeVar("T")']
 
         # add space between imports and rest of module
         result += [""]
