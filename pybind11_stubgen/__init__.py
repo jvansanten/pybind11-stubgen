@@ -419,6 +419,7 @@ class FunctionSignature(object):
                         if FunctionSignature.ignore_invalid_signature
                         else logging.ERROR
                     )
+                    raise ValueError
                     logger.log(
                         lvl,
                         "Generated stubs signature is degraded to `(*args, **kwargs) -> typing.Any` for",
@@ -494,20 +495,28 @@ class PropertySignature(object):
 
     def __init__(self, rtype, setter_args, access_type):
         self.rtype = rtype
-        self.setter_args = setter_args
+        self.setter_sig = FunctionSignature("name", "builtins", args=setter_args) if setter_args else None
+        if self.setter_sig:
+            for hook in function_signature_postprocessing_hooks:
+                hook(self.setter_sig)
         self.access_type = access_type
 
     @property
+    def setter_args(self):
+        return ", ".join(str(s) for s in self.setter_sig._args) if self.setter_sig else None
+
+    @property
     def setter_arg_type(self):
-        return FunctionSignature.argument_type(
-            FunctionSignature("name", self.setter_args).split_arguments()[1]
-        )
+        return self.setter_sig._args[1].annotation if self.setter_sig and len(self.setter_sig._args) > 1 else None
     
     def __repr__(self):
         return f"PropertySignature(rtype={self.rtype}, setter_args={self.setter_args}, access_type={self.access_type}"
 
     def get_all_involved_types(self):
-        return [self.setter_arg_type, self.rtype]
+        if setter_arg_type := self.setter_arg_type:
+            return [setter_arg_type, self.rtype]
+        else:
+            return [self.rtype]
 
 # If true numpy.ndarray[int32[3,3]] will be reduced to numpy.ndarray
 BARE_NUPMY_NDARRAY = False
@@ -677,7 +686,7 @@ class StubsGenerator(object):
     ):  # type:  (Any, str)-> PropertySignature
 
         getter_rtype = "None"
-        setter_args = "None"
+        setter_args = None
         access_type = PropertySignature.NONE
 
         strip_module_name = False
@@ -712,7 +721,8 @@ class StubsGenerator(object):
                         setter_args = ",".join(["self"] + args.split(",")[1:])
                         break
         getter_rtype = StubsGenerator.apply_classname_replacements(getter_rtype)
-        setter_args = StubsGenerator.apply_classname_replacements(setter_args)
+        if setter_args:
+            setter_args = StubsGenerator.apply_classname_replacements(setter_args)
         return PropertySignature(getter_rtype, setter_args, access_type)
 
     @staticmethod
@@ -1008,7 +1018,7 @@ class PropertyStubsGenerator(StubsGenerator):
             self.format_docstring(docstring_prop),
         ]
 
-        if self.signature.setter_args != "None":
+        if self.signature.setter_args:
             result.append("@{field_name}.setter".format(field_name=self.name))
             result.append(
                 "def {field_name}({args}) -> None:".format(
