@@ -181,9 +181,7 @@ def implicit_conversions_as_unions(sig: "FunctionSignature") -> None:
     for arg in sig._args[1:]:
         for target, sources in implicit.items():
             if arg.annotation == target:
-                print(arg.annotation)
                 arg.annotation = f"typing.Union[{', '.join((target, *sources))}]"
-                print(arg.annotation)
 
 def replace_object_protocol_rtypes(sig: "FunctionSignature") -> None:
     sig.rtype = OBJECT_PROTOCOL_RETURN_TYPES.get(sig.name, sig.rtype)
