@@ -6,6 +6,7 @@ import importlib
 import inspect
 import itertools
 import logging
+import numbers
 import os
 import re
 import sys
@@ -124,7 +125,7 @@ def _type_or_union(klass: Union[Type, tuple[Type, ...]]):
     if klass is None:
         return Any
     elif isinstance(klass, Type):
-        return get_container_equivalent(klass) or klass
+        return get_container_base(klass) or klass
     elif isinstance(klass, tuple):
         return Union[klass]
     else:
@@ -140,13 +141,20 @@ def _is_std_list_indexing_suite(klass: Type) -> bool:
         return False
     return hasattr(klass, "__value_type__") and not (hasattr(klass, "pre_order_iterator") or hasattr(klass, "pre_order_iter"))
 
-def get_container_equivalent(klass: Type, strict=True):
-    """Replace container an annotation that covers the types implicitly convertible to that container"""
-    if klass in _container_equivalents:
-        return _container_equivalents[klass]
-    if not strict and _is_std_map_indexing_suite(klass):
-        return Mapping[_type_or_union(klass.__key_type__()), _type_or_union(klass.__value_type__())]
+def get_container_base(klass: Type):
+    """Get a base class for the container type"""
+    if klass in _container_bases:
+        return _container_bases[klass]
     if _is_std_list_indexing_suite(klass):
+        return Sequence[_type_or_union(klass.__value_type__())]
+
+def get_container_equivalent(klass: Type):
+    """Replace container with an annotation that covers the types implicitly convertible to that container"""
+    if _is_std_list_indexing_suite(klass):
+        value_type = _type_or_union(klass.__value_type__())
+        if issubclass(value_type, numbers.Integral | numbers.Real):
+            from icecube.icetray.typing import NumericBuffer
+            return typing.Union[Sequence[value_type], NumericBuffer]
         return Sequence[_type_or_union(klass.__value_type__())]
 
 def strip_current_module_name(obj, module_name):
@@ -932,7 +940,7 @@ for op in "add", "sub", "mul", "div":
 for f in ("__getitem__",):
     IGNORE_COMMENTS[f] = {"override"}
 
-_container_equivalents: dict[type,type] = {}
+_container_bases: dict[type,type] = {}
 
 
 class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
@@ -1100,8 +1108,8 @@ class ClassStubsGenerator(StubsGenerator):
 
         bases = inspect.getmro(self.klass)[1:]
 
-        if equivalent := get_container_equivalent(self.klass):
-            bases = bases + (equivalent,)
+        if container_base := get_container_base(self.klass):
+            bases = bases + (container_base,)
 
         def is_base_member(name, member):
             for base in bases:
@@ -1182,7 +1190,7 @@ class ClassStubsGenerator(StubsGenerator):
                     f.signatures[0]._args[1].annotation = f"typing.Iterable[{value_type_name}]"
         
         if _is_std_map_indexing_suite(self.klass):
-            _container_equivalents[self.klass.__item_type__()] = tuple[_type_or_union(self.klass.__key_type__()), _type_or_union(self.klass.__value_type__())]
+            _container_bases[self.klass.__item_type__()] = tuple[_type_or_union(self.klass.__key_type__()), _type_or_union(self.klass.__value_type__())]
             class_type_name = fully_qualified_type_string(self.klass, self.klass.__module__)
             key_type_name, value_type_name = (
                 fully_qualified_type_string(n, self.klass.__module__)
