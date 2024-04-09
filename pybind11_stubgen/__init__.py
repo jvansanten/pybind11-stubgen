@@ -183,13 +183,26 @@ def replace_container_types(sig: "FunctionSignature") -> None:
         if equivalent := get_container_equivalent(arg.get_class(sig.module_name)):
             arg.annotation = repr(equivalent)
 
+# user-defined conversions
+IMPLICIT_CONVERSIONS: dict[str,list[str]] = {}
+
 def implicit_conversions_as_unions(sig: "FunctionSignature") -> None:
-    # wouldn't it be nice if boost-python emitted these in docstrings?
-    implicit = {"I3ParticleID": ["I3Particle"]}
     for arg in sig._args[1:]:
-        for target, sources in implicit.items():
+        for target, sources in IMPLICIT_CONVERSIONS.items():
             if arg.annotation == target:
                 arg.annotation = f"typing.Union[{', '.join((target, *sources))}]"
+
+# user-supplied overrides for attributes, e.g. for dealing with static
+# properties where the base type can't be introspected
+ATTRIBUTE_OVERRIDES: list["AttributeOverride"] = []
+
+# user-supplied overrides for function signatures
+FUNCTION_SIGNATURE_OVERRIDES: list["FunctionSignatureOverride"] = []
+
+def user_defined_overrides(sig: "FunctionSignature") -> None:
+    for override in FUNCTION_SIGNATURE_OVERRIDES:
+        if override.name.search(f"{sig.module_name}.{sig.qualname}"):
+            sig.ignores.update(override.ignores)
 
 def replace_object_protocol_rtypes(sig: "FunctionSignature") -> None:
     sig.rtype = OBJECT_PROTOCOL_RETURN_TYPES.get(sig.name, sig.rtype)
@@ -236,6 +249,7 @@ function_signature_postprocessing_hooks.append(replace_container_types)
 function_signature_postprocessing_hooks.append(treat_object_as_any)
 function_signature_postprocessing_hooks.append(fixup_object_protocol)
 function_signature_postprocessing_hooks.append(fixup_default_repr)
+function_signature_postprocessing_hooks.append(user_defined_overrides)
 
 
 def _find_str_end(s, start):
@@ -362,7 +376,16 @@ class Argument:
         if "[" in self.annotation:
             return None
         return self._get_annotation_class(importlib.import_module(current_module), self.annotation)
-        
+
+@dataclasses.dataclass
+class AttributeOverride:
+    name: re.Pattern
+    annotation: Optional[str] = None
+
+@dataclasses.dataclass
+class FunctionSignatureOverride:
+    name: re.Pattern
+    ignores: List[str] = dataclasses.field(default_factory=list)
 
 class FunctionSignature(object):
     # When True don't raise an error when invalid signatures/defaultargs are
@@ -385,12 +408,14 @@ class FunctionSignature(object):
         ) + (0 if cls.ignore_invalid_signature else cls.n_invalid_signatures)
 
     def __init__(self, name, module_name, args="*args, **kwargs", rtype="None", validate=True):
-        self.name = name
+        self.name = name.split('.')[-1]
+        self.qualname = name
         self.module_name = module_name
         self.args = args
         self.rtype = rtype
         self._args: list[Argument] = []
         self.argtypes: dict[str, str] = {}
+        self.ignores: set[str] = set()
 
         if validate:
             invalid_defaults, self.args = replace_default_pybind11_repr(self.args)
@@ -447,7 +472,7 @@ class FunctionSignature(object):
         return hash((self.name, ((arg.name, arg.annotation, arg.default) for arg in self._args), self.rtype))
 
     def __repr__(self):
-        return f"FunctionSignature({self.name}, args={self.args}, rtype={self.rtype})"
+        return f"FunctionSignature({self.qualname}, args={self.args}, rtype={self.rtype})"
 
     def __str__(self):
         return f'{self.name}({", ".join(str(arg) for arg in self._args)}) -> {self.rtype}:'
@@ -641,8 +666,8 @@ class StubsGenerator(object):
 
     @staticmethod
     def function_signatures_from_docstring(
-        name, func, module_name
-    ):  # type: (str, Any, str) -> List[FunctionSignature]
+        name, func, qualname, module_name
+    ):  # type: (str, Any, str, str) -> List[FunctionSignature]
         try:
             signature_regex = (
                 r"(\s*(?P<overload_number>\d+).)"
@@ -659,7 +684,7 @@ class StubsGenerator(object):
                     args = m.group("args")
                     rtype = m.group("rtype")
                     if _is_balanced(args):
-                        signatures.append(FunctionSignature(name, module_name, args, rtype))
+                        signatures.append(FunctionSignature(qualname, module_name, args, rtype))
 
             # strip module name if provided
             if module_name:
@@ -775,8 +800,9 @@ def is_boost_python_enum(klass):
     )
 
 class AttributeStubsGenerator(StubsGenerator):
-    def __init__(self, name, attribute):  # type: (str, Any)-> None
-        self.name = name
+    def __init__(self, qualname, attribute):  # type: (str, Any)-> None
+        self.name = qualname.split(".")[-1]
+        self.qualname = qualname
         self.attr = attribute
 
     def parse(self):
@@ -827,6 +853,13 @@ class AttributeStubsGenerator(StubsGenerator):
         value_lines = repr(self.attr).split("\n")
         typename = self.fully_qualified_name(type(self.attr))
 
+        # use typename as annotation, or user-supplied override
+        annotation = typename
+        for override in ATTRIBUTE_OVERRIDES:
+            if override.name.search(self.qualname):
+                if override.annotation:
+                    annotation = override.annotation
+
         if len(value_lines) == 1:
             value = value_lines[0]
             # remove random address from <foo.Foo object at 0x1234>
@@ -836,16 +869,12 @@ class AttributeStubsGenerator(StubsGenerator):
             else:
                 value_comment = " # value = {value}".format(value=value)
             return [
-                "{name}: {typename}{value_comment}".format(
-                    name=self.name, typename=typename, value_comment=value_comment
-                )
+                f"{self.name}: {annotation}{value_comment}"
             ]
         else:
             return (
                 [
-                    "{name}: {typename} # value = ".format(
-                        name=self.name, typename=typename
-                    )
+                    f"{self.name}: {annotation} # value = "
                 ]
                 + ['"""']
                 + [l.replace('"""', r"\"\"\"") for l in value_lines]
@@ -871,7 +900,7 @@ class FreeFunctionStubsGenerator(StubsGenerator):
 
     def parse(self):
         self.signatures = self.function_signatures_from_docstring(
-            self.name, self.member, self.module_name
+            self.name, self.member, self.name, self.module_name
         )
 
     def to_lines(self):  # type: () -> List[str]
@@ -950,6 +979,11 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
             name, free_function, module_name
         )
 
+    def parse(self):
+        self.signatures = self.function_signatures_from_docstring(
+            self.name, self.member, f"{self.class_name}.{self.name}", self.module_name
+        )
+
     def to_lines(self):  # type: () -> List[str]
         result = []
         docstring = self.sanitize_docstring(self.member.__doc__)
@@ -977,7 +1011,7 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
             if sig.name in INPLACE_METHODS:
                 sig.rtype = self.class_name
 
-            comment = IGNORE_COMMENTS.get(sig.name, set()).copy()
+            comment = IGNORE_COMMENTS.get(sig.name, set()).copy() | sig.ignores
             if len(self.signatures) > 1:
                 result.append("@typing.overload")
                 if comment:
@@ -1147,7 +1181,7 @@ class ClassStubsGenerator(StubsGenerator):
                 name in self.attributes_blacklist
                 or (is_pybind11 and name in self.pybind11_attributes_blacklist)
             ):
-                self.fields.append(AttributeStubsGenerator(name, member))
+                self.fields.append(AttributeStubsGenerator(f"{self.fully_qualified_name(self.klass)}.{name}", member))
                 # logger.warning("Unknown member %s type : `%s` " % (name, str(type(member))))
 
         # ensure that names/values come after definitions
@@ -1595,6 +1629,9 @@ def main(args=None):
         "-i", "--import-modules", action="append", default=[], metavar="PREIMPORT_MODULES", help="modules to import (but not generate stubs for)"
     )
     parser.add_argument(
+        "--config", default=None, metavar="CONFIG", help="location of config"
+    )
+    parser.add_argument(
         "module_names", nargs="+", metavar="MODULE_NAME", type=str, help="modules names"
     )
     parser.add_argument("--log-level", default="INFO", help="Set output log level")
@@ -1642,6 +1679,20 @@ def main(args=None):
 
     for _module_name in sys_args.import_modules:
         importlib.import_module(_module_name)
+
+    if sys_args.config:
+        import toml
+        with open(sys_args.config) as f:
+            config = toml.load(f)
+        # add implicit conversions
+        for conversion in config.get("tool", {}).get("pybind11-stubgen", {}).get("implicit_conversions", []):
+            if not conversion["to"] in IMPLICIT_CONVERSIONS:
+                IMPLICIT_CONVERSIONS[conversion["to"]] = []
+            IMPLICIT_CONVERSIONS[conversion["to"]].append(conversion["from"])
+        for override in config.get("tool", {}).get("pybind11-stubgen", {}).get("overrides", {}).get("method", []):
+            FUNCTION_SIGNATURE_OVERRIDES.append(FunctionSignatureOverride(**(override | {"name": re.compile(override["name"])})))
+        for override in config.get("tool", {}).get("pybind11-stubgen", {}).get("overrides", {}).get("attribute", []):
+            ATTRIBUTE_OVERRIDES.append(AttributeOverride(**(override | {"name": re.compile(override["name"])})))
 
     with DirectoryWalkerGuard(sys_args.output_dir):
         for _module_name in sys_args.module_names:
