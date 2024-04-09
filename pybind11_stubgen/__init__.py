@@ -62,6 +62,21 @@ OBJECT_PROTOCOL_RETURN_TYPES = {
 from .boost_python_signature import transform_signatures
 function_docstring_preprocessing_hooks.append(transform_signatures)
 
+def strip_cpp_signatures(doc: str) -> str:
+    out = []
+    tag = re.compile(r" *C\+\+ signature :")
+    in_sig = False
+    for line in doc.split("\n"):
+        if not in_sig and tag.match(line):
+            in_sig = True
+        elif in_sig:
+            in_sig = len(line) == 0
+        else:
+            out.append(line)
+
+    return "\n".join(out)
+function_docstring_preprocessing_hooks.append(strip_cpp_signatures)
+
 from functools import partial, reduce, cache
 
 # strip trailing colon from boost-python-generated signature 
