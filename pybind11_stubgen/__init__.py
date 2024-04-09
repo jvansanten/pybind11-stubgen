@@ -163,14 +163,20 @@ def get_container_base(klass: Type):
     if _is_std_list_indexing_suite(klass):
         return Sequence[_type_or_union(klass.__value_type__())]
 
+def _is_subclass_or_union_thereof(type_or_union, superclass):
+    if typing.get_origin(type_or_union) is Union:
+        return all(_is_subclass_or_union_thereof(v, superclass) for v in typing.get_args(type_or_union))
+    else:
+        return issubclass(type_or_union, superclass)
+
 def get_container_equivalent(klass: Type):
     """Replace container with an annotation that covers the types implicitly convertible to that container"""
     if _is_std_list_indexing_suite(klass):
         value_type = _type_or_union(klass.__value_type__())
-        if issubclass(value_type, numbers.Integral | numbers.Real):
+        if _is_subclass_or_union_thereof(value_type, numbers.Integral | numbers.Real):
             from icecube.icetray.typing import NumericBuffer
             return typing.Union[Sequence[value_type], NumericBuffer]
-        return Sequence[_type_or_union(klass.__value_type__())]
+        return Sequence[value_type]
 
 def strip_current_module_name(obj, module_name):
     regex = r"{}\.(\w+)".format(module_name.replace(".", r"\."))
@@ -1215,7 +1221,7 @@ class ClassStubsGenerator(StubsGenerator):
         # fix up the signatures of container methods
         if _is_std_list_indexing_suite(self.klass):
             class_type_name = self.fully_qualified_name(self.klass)
-            key_type_name, value_type_name = "int", self.fully_qualified_name(self.klass.__value_type__())
+            key_type_name, value_type_name = "int", self.fully_qualified_name(_type_or_union(self.klass.__value_type__()))
             for f in self.methods:
                 if f.name == "__iter__":
                     f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
