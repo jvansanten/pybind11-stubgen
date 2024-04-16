@@ -983,9 +983,6 @@ IGNORE_COMMENTS = {}
 # iadd may be inconsistent with add (if add lacks some overrides)
 for op in "add", "sub", "mul", "div":
     IGNORE_COMMENTS[f"__i{op}__"] = {"misc"}
-# these still return lists, py2 style
-# for f in "keys", "values", "items":
-#     IGNORE_COMMENTS[f] = {"override"}
 # getitem may be missing SupportsIndex, slice overrides
 for f in ("__getitem__",):
     IGNORE_COMMENTS[f] = {"override"}
