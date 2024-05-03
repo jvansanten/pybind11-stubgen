@@ -471,7 +471,6 @@ class FunctionSignature(object):
                         if FunctionSignature.ignore_invalid_signature
                         else logging.ERROR
                     )
-                    raise ValueError
                     logger.log(
                         lvl,
                         "Generated stubs signature is degraded to `(*args, **kwargs) -> typing.Any` for",
