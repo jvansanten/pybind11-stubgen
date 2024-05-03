@@ -38,8 +38,11 @@ r"""
 >>> transform_signatures('\n__init__( (object)arg1) -> None\n\n__init__( (object)arg1, (I3STConfiguration)arg2) -> None\n\n__init__( (object)self, (str)name, (I3VectorOMKeyLinkSet)omKeyLinkSets) -> None :\n    Constructs a new I3STConfiguration object with the given name and given  \n    list of OMKeyLinkSet objects.')
 '1. __init__(arg1: object) -> None:\n\n1. __init__(arg1: object, arg2: I3STConfiguration) -> None:\n\n1. __init__(self: object, name: str, omKeyLinkSets: I3VectorOMKeyLinkSet) -> None:\n\n    Constructs a new I3STConfiguration object with the given name and given  \n    list of OMKeyLinkSet objects.'
 
->>> transform_signatures('\nmuon_bundle_geometry( (I3Position)om, (I3Particle)track, (float)bundle_radius [, (IceModel)ice_model=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636) [, (I3Direction)omori=...]]) -> PairDoubleDouble :')
-'1. muon_bundle_geometry(om: I3Position, track: I3Particle, bundle_radius: float, ice_model: IceModel=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636), omori: I3Direction=...) -> PairDoubleDouble:'
+>>> transform_signatures('\nmuon_bundle_geometry( (icecube._dataclasses.I3Position)om, (icecube._dataclasses.I3Particle)track, (float)bundle_radius [, (IceModel)ice_model=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636)]) -> icecube._dataclasses.PairDoubleDouble :')
+'1. muon_bundle_geometry(om: icecube._dataclasses.I3Position, track: icecube._dataclasses.I3Particle, bundle_radius: float, ice_model: IceModel=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636)) -> icecube._dataclasses.PairDoubleDouble:'
+
+>>> transform_signatures('\nmuon_bundle_geometry( (icecube._dataclasses.I3Position)om, (icecube._dataclasses.I3Particle)track, (float)bundle_radius [, (IceModel)ice_model=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636) [, (icecube._dataclasses.I3Direction)omori=<icecube._dataclasses.I3Direction object at 0xffff6f790820>]]) -> icecube._dataclasses.PairDoubleDouble :')
+'1. muon_bundle_geometry(om: icecube._dataclasses.I3Position, track: icecube._dataclasses.I3Particle, bundle_radius: float, ice_model: IceModel=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636), omori: icecube._dataclasses.I3Direction=...) -> icecube._dataclasses.PairDoubleDouble:'
 """
 
 import pyparsing as pp
@@ -76,6 +79,10 @@ def make_signature() -> pp.ParserElement:
     function_call = qualname + pp.Literal("(") + pp.Opt(arg_list) + pp.Literal(")")
     literal_list = pp.Literal("[") + pp.Opt(arg_list) + pp.Literal("]")
 
+    # transform "<icecube._dataclasses.I3Direction object at 0xffff6f790820>" to "..."
+    default_repr = pp.Combine(pp.Literal("<") + qualname + " object at " + pp.Combine(pp.Literal("0x") + pp.Word("0123456789abcef")) + pp.Literal(">"))
+    default_repr.set_parse_action(lambda *args: "...")
+
     expr <<= pp.Combine(literal | literal_list | function_call | qualname | pp.Literal("..."))
 
     annotation = (
@@ -85,7 +92,7 @@ def make_signature() -> pp.ParserElement:
     parameter = (
         annotation
         + name.set_results_name("arg")
-        + pp.Opt(pp.Suppress("=") + expr, default=None).set_results_name("default")
+        + pp.Opt(pp.Suppress("=") + (default_repr | expr), default=None).set_results_name("default")
     )
 
     parameter_run = pp.delimited_list(pp.Group(parameter), ", ")
