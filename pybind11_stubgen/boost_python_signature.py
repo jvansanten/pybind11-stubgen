@@ -41,7 +41,7 @@ r"""
 >>> transform_signatures('\nmuon_bundle_geometry( (icecube._dataclasses.I3Position)om, (icecube._dataclasses.I3Particle)track, (float)bundle_radius [, (IceModel)ice_model=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636)]) -> icecube._dataclasses.PairDoubleDouble :')
 '1. muon_bundle_geometry(om: icecube._dataclasses.I3Position, track: icecube._dataclasses.I3Particle, bundle_radius: float, ice_model: IceModel=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636)) -> icecube._dataclasses.PairDoubleDouble:'
 
->>> transform_signatures('\nmuon_bundle_geometry( (icecube._dataclasses.I3Position)om, (icecube._dataclasses.I3Particle)track, (float)bundle_radius [, (IceModel)ice_model=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636) [, (icecube._dataclasses.I3Direction)omori=<icecube._dataclasses.I3Direction object at 0xffff6f790820>]]) -> icecube._dataclasses.PairDoubleDouble :')
+>>> transform_signatures('\nmuon_bundle_geometry( (icecube._dataclasses.I3Position)om, (icecube._dataclasses.I3Particle)track, (float)bundle_radius [, (IceModel)ice_model=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636) [, (icecube._dataclasses.I3Direction)omori=<icecube._dataclasses.I3Direction object at 0xabcdef012345689>]]) -> icecube._dataclasses.PairDoubleDouble :')
 '1. muon_bundle_geometry(om: icecube._dataclasses.I3Position, track: icecube._dataclasses.I3Particle, bundle_radius: float, ice_model: IceModel=IceModel(98,556.7,33.29,0.8395,3.094,-3.946,4.636), omori: icecube._dataclasses.I3Direction=...) -> icecube._dataclasses.PairDoubleDouble:'
 """
 
@@ -80,7 +80,7 @@ def make_signature() -> pp.ParserElement:
     literal_list = pp.Literal("[") + pp.Opt(arg_list) + pp.Literal("]")
 
     # transform "<icecube._dataclasses.I3Direction object at 0xffff6f790820>" to "..."
-    default_repr = pp.Combine(pp.Literal("<") + qualname + " object at " + pp.Combine(pp.Literal("0x") + pp.Word("0123456789abcef")) + pp.Literal(">"))
+    default_repr = pp.Combine(pp.Literal("<") + qualname + " object at " + pp.Combine(pp.Literal("0x") + pp.Word("0123456789abcdef")) + pp.Literal(">"))
     default_repr.set_parse_action(lambda *args: "...")
 
     expr <<= pp.Combine(literal | literal_list | function_call | qualname | pp.Literal("..."))
