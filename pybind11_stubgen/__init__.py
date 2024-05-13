@@ -166,8 +166,10 @@ def get_container_base(klass: Type):
 def _is_subclass_or_union_thereof(type_or_union, superclass):
     if typing.get_origin(type_or_union) is Union:
         return all(_is_subclass_or_union_thereof(v, superclass) for v in typing.get_args(type_or_union))
-    else:
+    try:
         return issubclass(type_or_union, superclass)
+    except TypeError:
+        return False
 
 def get_container_equivalent(klass: Type):
     """Replace container with an annotation that covers the types implicitly convertible to that container"""
