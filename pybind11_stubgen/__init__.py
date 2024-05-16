@@ -240,7 +240,7 @@ def treat_object_as_any(sig: "FunctionSignature") -> None:
 def fixup_object_protocol(sig: "FunctionSignature") -> None:
     # objects must compare to any other type
     if sig.name in {"__eq__", "__ne__"}:
-        sig._args[1].annotation = "typing.Any"
+        sig._args[1].annotation = "object"
 
 def fixup_default_repr(sig: "FunctionSignature") -> None:
     for arg in sig._args:
