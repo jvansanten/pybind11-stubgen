@@ -82,6 +82,9 @@ from functools import partial, reduce, cache
 # strip trailing colon from boost-python-generated signature 
 function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+):\s*?$", flags=re.MULTILINE).sub, r"\1"))
 
+# replace pre-PEP-585 generics with collections.abc equivalents
+function_docstring_preprocessing_hooks.append(partial(re.compile("typing\.(Iterable|Iterator|Sequence)").sub, r"collections.abc.\1"))
+
 def remove_shadowing_overloads(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
     """
     Remove int overloads if a float overload is present. mypy assumes that float
@@ -1222,7 +1225,7 @@ class ClassStubsGenerator(StubsGenerator):
             key_type_name, value_type_name = "int", self.fully_qualified_name(_type_or_union(self.klass.__value_type__()))
             for f in self.methods:
                 if f.name == "__iter__":
-                    f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
+                    f.signatures[0].rtype = f"collections.abc.Iterator[{value_type_name}]"
                 if f.name == "__setitem__":
                     f.signatures[0]._args[1].annotation = "int"
                     f.signatures[0]._args[2].annotation = value_type_name
@@ -1240,7 +1243,7 @@ class ClassStubsGenerator(StubsGenerator):
                 if f.name == "append":
                     f.signatures[0]._args[1].annotation = value_type_name
                 if f.name == "extend":
-                    f.signatures[0]._args[1].annotation = f"typing.Iterable[{value_type_name}]"
+                    f.signatures[0]._args[1].annotation = f"collections.abc.Iterable[{value_type_name}]"
         
         if _is_std_map_indexing_suite(self.klass):
             _container_bases[self.klass.__item_type__()] = tuple[_type_or_union(self.klass.__key_type__()), _type_or_union(self.klass.__value_type__())]
@@ -1272,16 +1275,16 @@ class ClassStubsGenerator(StubsGenerator):
                 if f.name == "__delitem__":
                     f.signatures[0]._args[1].annotation = key_equiv_name
                 if f.name == "__iter__":
-                    f.signatures[0].rtype = f"typing.Iterator[{item_type_name}]"
+                    f.signatures[0].rtype = f"collections.abc.Iterator[{item_type_name}]"
                 if f.name == "itervalues":
                     f.signatures[0]._args[0].name = "self"
-                    f.signatures[0].rtype = f"typing.Iterator[{value_type_name}]"
+                    f.signatures[0].rtype = f"collections.abc.Iterator[{value_type_name}]"
                 if f.name == "iterkeys":
                     f.signatures[0]._args[0].name = "self"
-                    f.signatures[0].rtype = f"typing.Iterator[{key_type_name}]"
+                    f.signatures[0].rtype = f"collections.abc.Iterator[{key_type_name}]"
                 if f.name == "iteritems":
                     f.signatures[0]._args[0].name = "self"
-                    f.signatures[0].rtype = f"typing.Iterator[{item_type_name}]"
+                    f.signatures[0].rtype = f"collections.abc.Iterator[{item_type_name}]"
                 if f.name in ("pop", "get"):
                     f.signatures[0].rtype = value_type_name
                     # with default value, return may be default
