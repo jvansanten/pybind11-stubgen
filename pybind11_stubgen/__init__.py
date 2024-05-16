@@ -1285,8 +1285,8 @@ class ClassStubsGenerator(StubsGenerator):
                 if f.name in ("pop", "get"):
                     f.signatures[0].rtype = value_type_name
                     # with default value, return may be default
-                    f.signatures[1]._args[2].annotation = "T"
-                    f.signatures[1].rtype = f"typing.Union[T, {value_type_name}]"
+                    f.signatures[1]._args[2].annotation = "_T"
+                    f.signatures[1].rtype = f"typing.Union[_T, {value_type_name}]"
                 if f.name == "popitem":
                     f.signatures[0].rtype = f"tuple[{key_type_name},{value_type_name}]"
                 if f.name == "update":
@@ -1529,7 +1529,7 @@ class ModuleStubsGenerator(StubsGenerator):
             result += ["_Shape = typing.Tuple[int, ...]"]
 
         # add a single typevar to use
-        result += ['T = typing.TypeVar("T")']
+        result += ['_T = typing.TypeVar("_T")  # noqa: PYI018']
 
         # add space between imports and rest of module
         result += [""]
