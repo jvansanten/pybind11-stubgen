@@ -942,7 +942,7 @@ class FreeFunctionStubsGenerator(StubsGenerator):
                 result.append(self.format_docstring(docstring))
                 docstring = None  # don't print docstring for other overloads
             else:
-                result.append(self.indent("pass"))
+                result.append(self.indent("..."))
 
         return result
 
@@ -1087,7 +1087,7 @@ class PropertyStubsGenerator(StubsGenerator):
             if docstring:
                 result.append(self.format_docstring(docstring))
             else:
-                result.append(self.indent("pass"))
+                result.append(self.indent("..."))
 
         return result
     
@@ -1350,7 +1350,7 @@ class ClassStubsGenerator(StubsGenerator):
         for p in self.fields:
             result.extend(map(self.indent, p.to_lines()))
 
-        result.append(self.indent("pass"))
+        result.append(self.indent("..."))
         return result
 
 
