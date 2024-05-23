@@ -816,7 +816,7 @@ class StubsGenerator(object):
     @staticmethod
     def format_docstring(docstring):
         docstring = inspect.cleandoc("\n" + docstring)
-        return StubsGenerator.indent('"""\n{}\n"""'.format(docstring.strip("\n")))
+        return StubsGenerator.indent('r"""\n{}\n"""'.format(docstring.strip("\n")))
 
 def is_boost_python_enum(klass):
     return any(
