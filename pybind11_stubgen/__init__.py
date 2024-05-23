@@ -1030,8 +1030,9 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
             else:
                 result.append("@staticmethod")
             
-            if sig.name in INPLACE_METHODS:
-                sig.rtype = self.class_name
+            # use Self for methods that return self
+            if result and result[-1] != "@staticmethod" and (sig.name in INPLACE_METHODS or sig.rtype == self.class_name):
+                sig.rtype = "typing.Self"
 
             comment = IGNORE_COMMENTS.get(sig.name, set()).copy() | sig.ignores
             if len(self.signatures) > 1:
