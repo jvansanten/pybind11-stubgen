@@ -1533,7 +1533,7 @@ class ModuleStubsGenerator(StubsGenerator):
             result.append(f"from {self.module.__name__} import {', '.join(m.module.__name__.split('.')[-1] for m in self.submodules)}")
 
         if "numpy" in used_modules and not BARE_NUPMY_NDARRAY:
-            result += ["_Shape = typing.Tuple[int, ...]"]
+            result += ["_Shape: typing.TypeAlias = typing.Tuple[int, ...]  # noqa: PYI047"]
 
         # add a single typevar to use
         result += ['_T = typing.TypeVar("_T")  # noqa: PYI018']
