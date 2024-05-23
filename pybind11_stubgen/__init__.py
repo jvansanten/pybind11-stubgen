@@ -1528,6 +1528,10 @@ class ModuleStubsGenerator(StubsGenerator):
             # result.extend(map(self.indent, map(lambda m: "import {}".format(m), used_modules)))
             result.extend(map(lambda mod: "import {}".format(mod), used_modules))
 
+        # explicitly import submodules (there's no way that they would not be imported, given how extension init works)
+        if self.submodules:
+            result.append(f"from {self.module.__name__} import {', '.join(m.module.__name__.split('.')[-1] for m in self.submodules)}")
+
         if "numpy" in used_modules and not BARE_NUPMY_NDARRAY:
             result += ["_Shape = typing.Tuple[int, ...]"]
 
