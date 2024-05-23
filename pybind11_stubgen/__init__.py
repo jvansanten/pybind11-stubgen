@@ -1068,17 +1068,17 @@ class PropertyStubsGenerator(StubsGenerator):
     def to_lines(self):  # type: () -> List[str]
 
         docstring = self.sanitize_docstring(self.prop.__doc__)
-        docstring_prop = "\n\n".join(
-            [docstring, ":type: {rtype}".format(rtype=self.signature.rtype)]
-        )
 
         result = [
             "@property",
             "def {field_name}(self) -> {rtype}:".format(
                 field_name=self.name, rtype=self.signature.rtype
-            ),
-            self.format_docstring(docstring_prop),
+            )
         ]
+        if docstring:
+            result.append(self.format_docstring(docstring))
+        else:
+            result.append(self.indent("..."))
 
         if self.signature.setter_args:
             result.append("@{field_name}.setter".format(field_name=self.name))
