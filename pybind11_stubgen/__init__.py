@@ -984,14 +984,6 @@ INPLACE_METHODS = {
     "__idiv__",
 }
 
-IGNORE_COMMENTS = {}
-# iadd may be inconsistent with add (if add lacks some overrides)
-for op in "add", "sub", "mul", "div":
-    IGNORE_COMMENTS[f"__i{op}__"] = {"misc"}
-# getitem may be missing SupportsIndex, slice overrides
-for f in ("__getitem__",):
-    IGNORE_COMMENTS[f] = {"override"}
-
 _container_bases: dict[type,type] = {}
 
 
@@ -1021,7 +1013,7 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
             result.extend(sig.decorators)
 
             if i == 0:
-                comment = IGNORE_COMMENTS.get(sig.name, set()).copy() | sig.ignores
+                comment = sig.ignores
             if len(self.signatures) > 1:
                 result.append("@typing.overload")
                 if comment:
