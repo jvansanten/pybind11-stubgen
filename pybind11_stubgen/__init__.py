@@ -442,6 +442,7 @@ class FunctionSignature(object):
         self._args: list[Argument] = []
         self.argtypes: dict[str, str] = {}
         self.ignores: set[str] = set()
+        self.decorators: list[str] = []
 
         if validate:
             invalid_defaults, self.args = replace_default_pybind11_repr(self.args)
@@ -1016,23 +1017,7 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
                 "Docstring is empty for '%s'" % self.fully_qualified_name(self.member)
             )
         for sig in self.signatures:
-            # detect boost::python self
-            if sig._args:
-                first = sig._args[0]
-                # detect boost::python self
-                if first.annotation == self.class_name or sig.name in DUNDER_METHODS:
-                    first.name = "self"
-                if first.name == "self":
-                    first.annotation = None
-                else:
-                    result.append("@staticmethod")
-            # no arg -> staticmethod
-            else:
-                result.append("@staticmethod")
-            
-            # use Self for methods that return self
-            if result and result[-1] != "@staticmethod" and (sig.name in INPLACE_METHODS or sig.rtype == self.class_name):
-                sig.rtype = "typing.Self"
+            result.extend(sig.decorators)
 
             comment = IGNORE_COMMENTS.get(sig.name, set()).copy() | sig.ignores
             if len(self.signatures) > 1:
@@ -1306,6 +1291,28 @@ class ClassStubsGenerator(StubsGenerator):
                     f.signatures[0].rtype = f"collections.abc.Sequence[{value_type_name}]"
                 if f.name == "items":
                     f.signatures[0].rtype = f"collections.abc.Sequence[{item_type_name}]"
+
+        # Generic fixups for self args and rtypes
+        for f in self.methods:
+            for sig in f.signatures:
+                # detect boost::python self
+                if sig._args:
+                    first = sig._args[0]
+                    # detect boost::python self
+                    if first.annotation == self.klass.__qualname__ or sig.name in DUNDER_METHODS:
+                        first.name = "self"
+                    if first.name == "self":
+                        first.annotation = None
+                    else:
+                        sig.decorators.append("@staticmethod")
+                # no arg -> staticmethod
+                else:
+                    sig.decorators.append("@staticmethod")
+                
+                # use Self for methods that return self
+                if "@staticmethod" not in sig.decorators and (sig.name in INPLACE_METHODS or sig.rtype == self.klass.__qualname__):
+                    sig.rtype = "typing_extensions.Self"
+
 
         for B in bases:
             if (
