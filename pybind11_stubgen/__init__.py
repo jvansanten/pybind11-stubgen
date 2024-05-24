@@ -1016,10 +1016,12 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
             logger.debug(
                 "Docstring is empty for '%s'" % self.fully_qualified_name(self.member)
             )
-        for sig in self.signatures:
+        comment = set()
+        for i, sig in enumerate(self.signatures):
             result.extend(sig.decorators)
 
-            comment = IGNORE_COMMENTS.get(sig.name, set()).copy() | sig.ignores
+            if i == 0:
+                comment = IGNORE_COMMENTS.get(sig.name, set()).copy() | sig.ignores
             if len(self.signatures) > 1:
                 result.append("@typing.overload")
                 if comment:
