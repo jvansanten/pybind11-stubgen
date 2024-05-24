@@ -1286,6 +1286,13 @@ class ClassStubsGenerator(StubsGenerator):
                 if f.name == "items":
                     f.signatures[0].rtype = f"collections.abc.Sequence[{item_type_name}]"
 
+        if typing.get_origin(_container_bases.get(self.klass)) is tuple:
+            for f in self.methods:
+                # __getitem__ does not handle slice or SupportsIndex
+                if f.name == "__getitem__":
+                    for sig in f.signatures:
+                        sig.ignores.add("override")
+
         # Generic fixups for self args and rtypes
         for f in self.methods:
             for sig in f.signatures:
