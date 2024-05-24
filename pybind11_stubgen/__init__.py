@@ -1210,9 +1210,10 @@ class ClassStubsGenerator(StubsGenerator):
                     f.signatures[0]._args[1].annotation = "int"
                     f.signatures[0]._args[2].annotation = value_type_name
                 if f.name == "__getitem__":
+                    # indexing_suite dispatches between int and slice internally;
+                    # adapt signature to match
                     f.signatures[0]._args[1].annotation = "int"
                     f.signatures[0].rtype = value_type_name
-                    # add a slice overload, why not
                     if len(f.signatures) == 1:
                         sig = copy.deepcopy(f.signatures[0])
                         sig.rtype = class_type_name
