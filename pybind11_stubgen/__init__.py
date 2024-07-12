@@ -346,17 +346,28 @@ def replace_default_pybind11_repr(line):
 def get_args(function_def_str: str):
     parsed = ast.parse(function_def_str)
     f: ast.FunctionDef = parsed.body[0]
-    f.args.defaults
     assert not f.args.kwonlyargs
-    assert not f.args.posonlyargs
-    defaults = [None] * (len(f.args.args)-len(f.args.defaults)) + f.args.defaults
-    for arg, default in zip(f.args.args, defaults):
+    for arg, posonly, default in zip(
+        itertools.chain(
+            f.args.posonlyargs,
+            f.args.args
+        ),
+        itertools.chain(
+            itertools.repeat(True, len(f.args.posonlyargs)),
+            itertools.repeat(False, len(f.args.args))
+        ),
+        itertools.chain(
+            itertools.repeat(None, len(f.args.posonlyargs)+len(f.args.args)-len(f.args.defaults)),
+            f.args.defaults
+        )
+    ):
         annotation = None if arg.annotation is None else ast.unparse(arg.annotation)
-        yield Argument(arg.arg, annotation, default)
+        yield Argument(arg.arg, posonly, annotation, default)
 
 @dataclasses.dataclass
 class Argument:
     name: str
+    posonly: bool
     annotation: str | None
     default: ast.Expr | None
 
@@ -501,7 +512,19 @@ class FunctionSignature(object):
         return f"FunctionSignature({self.qualname}, args={self.args}, rtype={self.rtype})"
 
     def __str__(self):
-        return f'{self.name}({", ".join(str(arg) for arg in self._args)}) -> {self.rtype}:'
+        posonly, pos_or_keyword = [], []
+        for arg in self._args:
+            if arg.posonly:
+                posonly.append(arg)
+            else:
+                pos_or_keyword.append(arg)
+        args = ", ".join(str(arg) for arg in posonly)
+        if args:
+            args += ", /"
+        if args and pos_or_keyword:
+            args += ", "
+        args += ", ".join(str(arg) for arg in pos_or_keyword)
+        return f'{self.name}({args}) -> {self.rtype}:'
 
     def split_arguments(self):
         if len(self.args.strip()) == 0:
