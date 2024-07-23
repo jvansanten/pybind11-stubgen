@@ -15,7 +15,7 @@ import warnings
 from argparse import ArgumentParser
 import typing
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Set, Type, Union
-from collections.abc import Sequence, Mapping
+from collections.abc import Sequence, MutableMapping
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,8 @@ def get_container_base(klass: Type):
         return _container_bases[klass]
     if _is_std_list_indexing_suite(klass):
         return Sequence[_type_or_union(klass.__value_type__())]
+    if _is_std_map_indexing_suite(klass):
+        return MutableMapping[_type_or_union(klass.__key_type__()), _type_or_union(klass.__value_type__())]
 
 def _is_subclass_or_union_thereof(type_or_union, superclass):
     if typing.get_origin(type_or_union) is Union:
@@ -1263,13 +1265,18 @@ class ClassStubsGenerator(StubsGenerator):
             item_type_name = fully_qualified_type_string(self.klass.__item_type__(), self.klass.__module__)
             for f in self.methods:
                 if f.name == "__init__":
+                    has_mapping_ctor = False
                     for s in f.signatures:
                         # mark dict and sequence constructors
                         if len(s._args) > 1:
                             if s._args[1].annotation == "dict":
+                                has_mapping_ctor = True
                                 s._args[1].annotation = f"collections.abc.Mapping[{key_equiv_name},{value_equiv_name}]"
                             if s._args[1].annotation == "list":
                                 s._args[1].annotation = f"collections.abc.Sequence[tuple[{key_equiv_name},{value_equiv_name}]]"
+                    # omit the copy ctor if defined, as it overlaps with the mapping ctor
+                    if has_mapping_ctor:
+                        f.signatures = [s for s in f.signatures if not (len(s._args) == 2 and s._args[1].annotation == self.klass.__name__)]
                 if f.name == "__setitem__":
                     f.signatures[0]._args[1].annotation = key_equiv_name
                     f.signatures[0]._args[2].annotation = value_equiv_name
@@ -1279,16 +1286,16 @@ class ClassStubsGenerator(StubsGenerator):
                 if f.name == "__delitem__":
                     f.signatures[0]._args[1].annotation = key_equiv_name
                 if f.name == "__iter__":
-                    f.signatures[0].rtype = f"collections.abc.Iterator[{item_type_name}]"
-                if f.name == "itervalues":
-                    f.signatures[0]._args[0].name = "self"
-                    f.signatures[0].rtype = f"collections.abc.Iterator[{value_type_name}]"
-                if f.name == "iterkeys":
-                    f.signatures[0]._args[0].name = "self"
                     f.signatures[0].rtype = f"collections.abc.Iterator[{key_type_name}]"
-                if f.name == "iteritems":
+                if f.name == "values":
                     f.signatures[0]._args[0].name = "self"
-                    f.signatures[0].rtype = f"collections.abc.Iterator[{item_type_name}]"
+                    f.signatures[0].rtype = f"collections.abc.ValuesView[{value_type_name}]"
+                if f.name == "keys":
+                    f.signatures[0]._args[0].name = "self"
+                    f.signatures[0].rtype = f"collections.abc.KeysView[{key_type_name}]"
+                if f.name == "items":
+                    f.signatures[0]._args[0].name = "self"
+                    f.signatures[0].rtype = f"collections.abc.ItemsView[{key_type_name},{value_type_name}]"
                 if f.name in ("pop", "get"):
                     f.signatures[0].rtype = value_type_name
                     # with default value, return may be default
@@ -1299,16 +1306,11 @@ class ClassStubsGenerator(StubsGenerator):
                 if f.name == "update":
                     f.signatures[0]._args[0].name = "self"
                     f.signatures[0]._args[1].annotation = f"collections.abc.Mapping[{key_equiv_name},{value_equiv_name}]"
+                    f.signatures[0].ignores.add("override") # do not support all signatures for now
                 if f.name == "fromkeys":
-                    f.signatures[0]._args[0].annotation = f"collections.abc.Sequence[{key_equiv_name}]"
+                    f.signatures[0]._args[0].annotation = f"collections.abc.Iterable[{key_equiv_name}]"
                     f.signatures[0]._args[1].annotation = value_equiv_name
                     f.signatures[0].rtype = class_type_name
-                if f.name == "keys":
-                    f.signatures[0].rtype = f"collections.abc.Sequence[{key_type_name}]"
-                if f.name == "values":
-                    f.signatures[0].rtype = f"collections.abc.Sequence[{value_type_name}]"
-                if f.name == "items":
-                    f.signatures[0].rtype = f"collections.abc.Sequence[{item_type_name}]"
 
         if typing.get_origin(_container_bases.get(self.klass)) is tuple:
             for f in self.methods:
