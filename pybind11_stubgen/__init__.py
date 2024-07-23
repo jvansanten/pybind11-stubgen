@@ -526,7 +526,8 @@ class FunctionSignature(object):
         if args and pos_or_keyword:
             args += ", "
         args += ", ".join(str(arg) for arg in pos_or_keyword)
-        return f'{self.name}({args}) -> {self.rtype}:'
+        comment = f" # type: ignore[{','.join(self.ignores)}]\n" if self.ignores else ""
+        return f'{self.name}({comment}{args}) -> {self.rtype}:'
 
     def split_arguments(self):
         if len(self.args.strip()) == 0:
@@ -1037,13 +1038,14 @@ class ClassMemberStubsGenerator(FreeFunctionStubsGenerator):
         for i, sig in enumerate(self.signatures):
             result.extend(sig.decorators)
 
-            if i == 0:
-                comment = sig.ignores
+            sig = copy.deepcopy(sig)
+
+            # attach ignores to the first overload
             if len(self.signatures) > 1:
                 result.append("@typing.overload")
-                if comment:
-                    result[-1] = result[-1] + f" # type: ignore[{','.join(comment)}]"
-                    comment = set()
+                if i == 0 and sig.ignores:
+                    result[-1] = result[-1] + f" # type: ignore[{','.join(sig.ignores)}]"
+                sig.ignores.clear()
             
             result.append(
                 "def {sig}{ellipsis}{comment}".format(
