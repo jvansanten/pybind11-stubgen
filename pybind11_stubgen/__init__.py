@@ -1254,7 +1254,6 @@ class ClassStubsGenerator(StubsGenerator):
                     f.signatures[0]._args[1].annotation = f"collections.abc.Iterable[{value_type_name}]"
         
         if _is_std_map_indexing_suite(self.klass):
-            _container_bases[self.klass.__item_type__()] = tuple[_type_or_union(self.klass.__key_type__()), _type_or_union(self.klass.__value_type__())]
             class_type_name = fully_qualified_type_string(self.klass, self.klass.__module__)
             key_type_name, value_type_name = (
                 fully_qualified_type_string(n, self.klass.__module__)
@@ -1264,7 +1263,6 @@ class ClassStubsGenerator(StubsGenerator):
                 fully_qualified_type_string(_type_or_union(n), self.klass.__module__)
                 for n in (self.klass.__key_type__(), self.klass.__value_type__() or typing.Any)
             )
-            item_type_name = fully_qualified_type_string(self.klass.__item_type__(), self.klass.__module__)
             for f in self.methods:
                 if f.name == "__init__":
                     has_mapping_ctor = False
