@@ -34,7 +34,7 @@ def flip_arg_annotations(doc: str) -> str:
     replace "(type)arg" with "arg: type". type may contain qualifiers, e.g. "foo.bar.type"
     """
     return re.sub(
-        "\(((?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+)\)([A-Za-z_]\w*)",
+        r"\(((?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+)\)([A-Za-z_]\w*)",
         r"\2: \1",
         doc
     )
@@ -43,7 +43,7 @@ def strip_trailing_colon(doc: str) -> str:
     """
     Strip trailing colon from boost-python-generated signature
     """
-    pattern = "(-> [A-Za-z_]\w*).*$"
+    pattern = r"(-> [A-Za-z_]\w*).*$"
     repl = r"\1"
     return re.sub(pattern, repl, doc, flags=re.MULTILINE)    
 
@@ -80,10 +80,10 @@ function_docstring_preprocessing_hooks.append(strip_cpp_signatures)
 from functools import partial, reduce, cache
 
 # strip trailing colon from boost-python-generated signature 
-function_docstring_preprocessing_hooks.append(partial(re.compile("(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+):\s*?$", flags=re.MULTILINE).sub, r"\1"))
+function_docstring_preprocessing_hooks.append(partial(re.compile(r"(-> (?:[A-Za-z_]\w*\.)*(?:[A-Za-z_]\w*)+):\s*?$", flags=re.MULTILINE).sub, r"\1"))
 
 # replace pre-PEP-585 generics with collections.abc equivalents
-function_docstring_preprocessing_hooks.append(partial(re.compile("typing\.(Iterable|Iterator|Sequence)").sub, r"collections.abc.\1"))
+function_docstring_preprocessing_hooks.append(partial(re.compile(r"typing\.(Iterable|Iterator|Sequence)").sub, r"collections.abc.\1"))
 
 def remove_shadowing_overloads(signatures: list["FunctionSignature"]) -> list["FunctionSignature"]:
     """
@@ -103,7 +103,7 @@ def remove_shadowing_overloads(signatures: list["FunctionSignature"]) -> list["F
         else:
             groups = {}
             for i, uargs in enumerate(unique):
-                if not uargs in groups:
+                if uargs not in groups:
                     groups[uargs] = [i]
                 else:
                     groups[uargs].append(i)
@@ -311,7 +311,7 @@ def _is_balanced(s):
     return len(stack) == 0
 
 
-class DirectoryWalkerGuard(object):
+class DirectoryWalkerGuard:
     def __init__(self, dirname):
         self.dirname = dirname
         self.origin = os.getcwd()
@@ -426,7 +426,7 @@ class FunctionSignatureOverride:
     name: re.Pattern
     ignores: List[str] = dataclasses.field(default_factory=list)
 
-class FunctionSignature(object):
+class FunctionSignature:
     # When True don't raise an error when invalid signatures/defaultargs are
     # encountered (yes, global variables, blame me)
     ignore_invalid_signature = False
@@ -470,11 +470,9 @@ class FunctionSignature(object):
                     lvl, "Default argument value(s) replaced with ellipses (...):"
                 )
                 for invalid_default in invalid_defaults:
-                    logger.log(lvl, "    {}".format(invalid_default))
+                    logger.log(lvl, f"    {invalid_default}")
 
-            function_def_str = "def {sig.name}({sig.args}) -> {sig.rtype}: ...".format(
-                sig=self
-            )
+            function_def_str = f"def {self.name}({self.args}) -> {self.rtype}: ..."
             try:
                 for arg in get_args(function_def_str):
                     self.argtypes[arg.name] = arg.annotation
@@ -570,7 +568,7 @@ class FunctionSignature(object):
         return types
 
 
-class PropertySignature(object):
+class PropertySignature:
     NONE = 0
     READ_ONLY = 1
     WRITE_ONLY = 2
@@ -626,10 +624,10 @@ def replace_numpy_array(match_obj):
 
     shape = match_obj.group("shape")
     if shape:
-        shape = ", _Shape[{}]".format(shape)
+        shape = f", _Shape[{shape}]"
     else:
         shape = ""
-    result = r"numpy.ndarray[{type}{shape}]".format(type=numpy_type, shape=shape)
+    result = fr"numpy.ndarray[{numpy_type}{shape}]"
     return result
 
 
@@ -646,7 +644,7 @@ def preprocess_docstring(doc):
         doc = hook(doc)
     return doc
 
-class StubsGenerator(object):
+class StubsGenerator:
     INDENT = " " * 4
 
     GLOBAL_CLASSNAME_REPLACEMENTS = {
@@ -708,7 +706,7 @@ class StubsGenerator(object):
         if module_name == "builtins":
             return class_name
         else:
-            return "{module}.{klass}".format(module=module_name, klass=class_name)
+            return f"{module_name}.{class_name}"
 
     @staticmethod
     def apply_classname_replacements(s):  # type: (str) -> Any
@@ -847,7 +845,7 @@ class StubsGenerator(object):
 
 def is_boost_python_enum(klass):
     return any(
-        "{module}.{name}".format(module=b.__module__, name=b.__name__) == "Boost.Python.enum"
+        f"{b.__module__}.{b.__name__}" == "Boost.Python.enum"
         for b in klass.__bases__
     )
 
@@ -887,20 +885,20 @@ class AttributeStubsGenerator(StubsGenerator):
         # special case for boost-python enums
         attr_type = type(self.attr)
         if is_boost_python_enum(attr_type):
-            return ["{name} = {klass}({repr})".format(name=self.name, klass=self.fully_qualified_name(attr_type), repr=repr(int(self.attr)))]
+            return [f"{self.name} = {self.fully_qualified_name(attr_type)}({repr(int(self.attr))})"]
 
         if self.is_safe_to_use_repr(self.attr):
-            return ["{name} = {repr}".format(name=self.name, repr=repr(self.attr))]
+            return [f"{self.name} = {repr(self.attr)}"]
 
         # special case for modules
         # https://github.com/sizmailov/pybind11-stubgen/issues/43
         if type(self.attr) is type(os) and hasattr(self.attr, "__name__"):
-            return ["{name} = {repr}".format(name=self.name, repr=self.attr.__name__)]
+            return [f"{self.name} = {self.attr.__name__}"]
 
         # special case for PyCapsule
         # https://github.com/sizmailov/pybind11-stubgen/issues/86
         if attr_type.__name__ == "PyCapsule" and attr_type.__module__ == "builtins":
-            return ["{name}: typing.Any  # PyCapsule()".format(name=self.name)]
+            return [f"{self.name}: typing.Any  # PyCapsule()"]
 
         value_lines = repr(self.attr).split("\n")
         typename = self.fully_qualified_name(type(self.attr))
@@ -916,10 +914,10 @@ class AttributeStubsGenerator(StubsGenerator):
             value = value_lines[0]
             # remove random address from <foo.Foo object at 0x1234>
             value = re.sub(r" at 0x[0-9a-fA-F]+>", ">", value)
-            if value == "<{typename} object>".format(typename=typename):
+            if value == f"<{typename} object>":
                 value_comment = ""
             else:
-                value_comment = " # value = {value}".format(value=value)
+                value_comment = f" # value = {value}"
             return [
                 f"{self.name}: {annotation}{value_comment}"
             ]
@@ -1078,9 +1076,7 @@ class PropertyStubsGenerator(StubsGenerator):
 
         result = [
             "@property",
-            "def {field_name}(self) -> {rtype}:".format(
-                field_name=self.name, rtype=self.signature.rtype
-            )
+            f"def {self.name}(self) -> {self.signature.rtype}:"
         ]
         if docstring:
             result.append(self.format_docstring(docstring))
@@ -1088,11 +1084,9 @@ class PropertyStubsGenerator(StubsGenerator):
             result.append(self.indent("..."))
 
         if self.signature.setter_args:
-            result.append("@{field_name}.setter".format(field_name=self.name))
+            result.append(f"@{self.name}.setter")
             result.append(
-                "def {field_name}({args}) -> None:".format(
-                    field_name=self.name, args=self.signature.setter_args
-                )
+                f"def {self.name}({self.signature.setter_args}) -> None:"
             )
             if docstring:
                 result.append(self.format_docstring(docstring))
@@ -1403,10 +1397,7 @@ class AliasStubsGenerator(StubsGenerator):
 
     def to_lines(self): # type: () -> List[str]
         return [
-            "{alias} = {origin}".format(
-                alias=self.alias_name,
-                origin=self.fully_qualified_name(self.origin)
-            )
+            f"{self.alias_name} = {self.fully_qualified_name(self.origin)}"
         ]
 
     def get_involved_modules_names(self): # type: () -> Set[str]
@@ -1541,7 +1532,7 @@ class ModuleStubsGenerator(StubsGenerator):
         if self.doc_string:
             result += ['"""' + self.doc_string.replace('"""', r"\"\"\"") + '"""']
 
-        result += ["import {}".format(self.module.__name__)]
+        result += [f"import {self.module.__name__}"]
 
         # import everything from typing
         result += ["import typing"]
@@ -1551,9 +1542,9 @@ class ModuleStubsGenerator(StubsGenerator):
             if name == class_name:
                 suffix = ""
             else:
-                suffix = " as {}".format(name)
+                suffix = f" as {name}"
             result += [
-                "from {} import {}{}".format(class_.__module__, class_name, suffix)
+                f"from {class_.__module__} import {class_name}{suffix}"
             ]
 
         # import used packages
@@ -1561,7 +1552,7 @@ class ModuleStubsGenerator(StubsGenerator):
         if used_modules:
             # result.append("if TYPE_CHECKING:")
             # result.extend(map(self.indent, map(lambda m: "import {}".format(m), used_modules)))
-            result.extend(map(lambda mod: "import {}".format(mod), used_modules))
+            result.extend(map(lambda mod: f"import {mod}", used_modules))
 
         # explicitly import submodules (there's no way that they would not be imported, given how extension init works)
         if self.submodules:
@@ -1577,7 +1568,7 @@ class ModuleStubsGenerator(StubsGenerator):
         result += [""]
 
         globals_ = {}
-        exec("from {} import *".format(self.module.__name__), globals_)
+        exec(f"from {self.module.__name__} import *", globals_)
         all_ = set(member for member in globals_.keys() if member.isidentifier()) - {
             "__builtins__"
         }
@@ -1608,7 +1599,7 @@ class ModuleStubsGenerator(StubsGenerator):
             if self.write_setup_py:
                 with open("setup.py", "w", encoding="utf-8") as setuppy:
                     setuppy.write(
-                        """from setuptools import setup
+                        f"""from setuptools import setup
 import os
 
 
@@ -1622,18 +1613,16 @@ def find_stubs(package):
 
 
 setup(
-    name='{package_name}-stubs',
-    maintainer="{package_name} Developers",
+    name='{self.short_name}-stubs',
+    maintainer="{self.short_name} Developers",
     maintainer_email="example@python.org",
-    description="PEP 561 type stubs for {package_name}",
+    description="PEP 561 type stubs for {self.short_name}",
     version='1.0',
-    packages=['{package_name}-stubs'],
+    packages=['{self.short_name}-stubs'],
     # PEP 561 requires these
-    install_requires=['{package_name}'],
-    package_data=find_stubs('{package_name}-stubs'),
-)""".format(
-                            package_name=self.short_name
-                        )
+    install_requires=['{self.short_name}'],
+    package_data=find_stubs('{self.short_name}-stubs'),
+)"""
                     )
 
 
@@ -1744,7 +1733,7 @@ def main(args=None):
             config = toml.load(f)
         # add implicit conversions
         for conversion in config.get("tool", {}).get("pybind11-stubgen", {}).get("implicit_conversions", []):
-            if not conversion["to"] in IMPLICIT_CONVERSIONS:
+            if conversion["to"] not in IMPLICIT_CONVERSIONS:
                 IMPLICIT_CONVERSIONS[conversion["to"]] = []
             IMPLICIT_CONVERSIONS[conversion["to"]].append(conversion["from"])
         for override in config.get("tool", {}).get("pybind11-stubgen", {}).get("overrides", {}).get("method", []):
